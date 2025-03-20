@@ -31,30 +31,14 @@ self.addEventListener('install', (event) => {
     caches.open(CACHE_NAME)
       .then((cache) => {
         console.log('[Service Worker] Caching app shell and content');
-        return Promise.all(
-          ASSETS_TO_CACHE.map(url => {
-            return fetch(url)
-              .then(response => {
-                if (!response.ok) {
-                  throw new Error(`Failed to cache ${url}: ${response.status} ${response.statusText}`);
-                }
-                return cache.put(url, response);
-              })
-              .catch(error => {
-                console.warn(`[Service Worker] Caching failed for ${url}:`, error.message);
-                // Don't let individual asset failures break the entire cache process
-                return Promise.resolve();
-              });
-          })
-        );
+        return cache.addAll(ASSETS_TO_CACHE).catch(error => {
+          console.error('[Service Worker] Pre-caching failed:', error);
+          // Continue even if some assets fail to cache
+          return Promise.resolve();
+        });
       })
       .then(() => {
         console.log('[Service Worker] Install completed');
-        return self.skipWaiting();
-      })
-      .catch(error => {
-        console.error('[Service Worker] Install failed:', error);
-        // Continue even if caching failed
         return self.skipWaiting();
       })
   );
@@ -92,54 +76,124 @@ function isSPARoute(pathname) {
          pathname.startsWith('/settle');
 }
 
+// Helper function to create a basic HTML response for offline mode
+function createOfflineFallbackResponse() {
+  return new Response(`
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>FairTab - Offline Mode</title>
+        <style>
+          body {
+            font-family: sans-serif;
+            padding: 20px;
+            text-align: center;
+            max-width: 500px;
+            margin: 0 auto;
+          }
+          .offline-message {
+            margin-top: 50px;
+            padding: 20px;
+            border: 1px solid #eee;
+            border-radius: 10px;
+            background-color: #f9f9f9;
+          }
+          h1 { color: #333; }
+          p { color: #666; line-height: 1.5; }
+          .spinner {
+            margin: 20px auto;
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top-color: #333;
+            animation: spin 1s ease-in-out infinite;
+          }
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+          .retry-button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="offline-message">
+          <h1>You're Offline</h1>
+          <p>Internet connection not available. FairTab is trying to load from the cache.</p>
+          <div class="spinner"></div>
+          <p>If the app doesn't load in a few seconds, please check your connection and try again.</p>
+          <button class="retry-button" onclick="window.location.reload()">Retry</button>
+        </div>
+      </body>
+    </html>
+  `, {
+    headers: {
+      'Content-Type': 'text/html',
+      'Cache-Control': 'no-cache'
+    }
+  });
+}
+
 // Fetch event - handle all network requests
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-  
-  // Log fetch attempts for debugging
-  console.log(`[Service Worker] Fetch: ${url.pathname} (${event.request.destination})`);
   
   // Skip non-GET requests and cross-origin requests
   if (event.request.method !== 'GET' || !url.origin.includes(self.location.origin)) {
     return;
   }
 
-  // For navigation requests or SPA routes, use a special strategy that always serves index.html
-  // This ensures React Router can take over client-side routing
+  // For navigation requests (page loads) and SPA routes
   if (event.request.mode === 'navigate' || isSPARoute(url.pathname)) {
     event.respondWith(
-      caches.match('/').then(cachedIndex => {
-        if (cachedIndex) {
-          // Always return the index.html for navigation requests
-          // This lets React Router handle the routing client-side
-          console.log(`[Service Worker] Serving index.html for SPA route: ${url.pathname}`);
-          
-          // Try to fetch and update the cache in the background
-          fetch(event.request)
-            .then(response => {
-              if (response.ok) {
-                caches.open(CACHE_NAME).then(cache => {
-                  cache.put('/', response.clone());
-                });
+      // Try network first for navigation requests to get fresh content
+      fetch(event.request)
+        .then(response => {
+          // If we got a valid response, clone it and cache it
+          if (response.ok) {
+            const responseToCache = response.clone();
+            caches.open(CACHE_NAME)
+              .then(cache => {
+                cache.put(event.request, responseToCache);
+              });
+          }
+          return response;
+        })
+        .catch(() => {
+          // If network fails, try to serve from cache
+          console.log('[Service Worker] Network request failed, falling back to cache for:', url.pathname);
+          return caches.match(event.request)
+            .then(cachedResponse => {
+              // If we have a cached response, return it
+              if (cachedResponse) {
+                console.log('[Service Worker] Serving from cache:', url.pathname);
+                return cachedResponse;
               }
-            })
-            .catch(error => {
-              console.log('[Service Worker] Background fetch failed:', error);
+              
+              // If we don't have a cached response for this exact URL,
+              // try serving the root (/) which should contain the SPA shell
+              return caches.match('/')
+                .then(rootResponse => {
+                  if (rootResponse) {
+                    console.log('[Service Worker] Serving root from cache for SPA route:', url.pathname);
+                    return rootResponse;
+                  }
+                  
+                  // If we can't serve from cache at all, show the offline fallback
+                  console.log('[Service Worker] No cache available, showing offline page');
+                  return createOfflineFallbackResponse();
+                });
             });
-            
-          return cachedIndex;
-        }
-        
-        // If index.html is not in cache, try to fetch it
-        return fetch(event.request)
-          .catch(() => {
-            console.log('[Service Worker] Fetch failed for navigation, returning offline page');
-            // Here you could return a specific offline page if you have one
-            return new Response('You are offline. Please try again when you have an internet connection.', {
-              headers: { 'Content-Type': 'text/html' }
-            });
-          });
-      })
+        })
     );
     return;
   }

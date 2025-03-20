@@ -40,6 +40,14 @@ const LoadingSpinner = () => (
 );
 LoadingSpinner.displayName = "LoadingSpinner";
 
+// Offline component
+const OfflineIndicator = () => (
+  <div className="bg-yellow-500 text-white p-2 text-center">
+    You are currently offline. Your changes will be saved locally and synced when you&apos;re back online.
+  </div>
+);
+OfflineIndicator.displayName = "OfflineIndicator";
+
 // Placeholder for expenses page
 const ExpensesPage = () => {
   return (
@@ -55,25 +63,55 @@ export function App() {
   const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    // Set loading to false after a short delay
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 500);
+  // Check if we're running in a browser environment
+  const isBrowser = typeof window !== 'undefined';
 
+  // Service worker registration status
+  const [swRegistered, setSwRegistered] = useState(false);
+
+  useEffect(() => {
+    // Set up online/offline event listeners
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
 
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
+    if (isBrowser) {
+      window.addEventListener("online", handleOnline);
+      window.addEventListener("offline", handleOffline);
+    }
+
+    // Check if service worker is active
+    const checkServiceWorker = async () => {
+      if ('serviceWorker' in navigator) {
+        try {
+          const registration = await navigator.serviceWorker.getRegistration();
+          setSwRegistered(!!registration && !!registration.active);
+        } catch (err) {
+          console.error('Service worker check failed:', err);
+          setSwRegistered(false);
+        }
+      }
+    };
+
+    checkServiceWorker();
+
+    // Shorter loading time when service worker is active and not online
+    // This helps load the cached content faster when offline
+    const loadingDelay = (!isOnline && swRegistered) ? 100 : 500;
+    
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, loadingDelay);
 
     return () => {
+      if (isBrowser) {
+        window.removeEventListener("online", handleOnline);
+        window.removeEventListener("offline", handleOffline);
+      }
       clearTimeout(timer);
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
     };
-  }, []);
+  }, [isOnline, isBrowser, swRegistered]);
 
+  // Show the loading spinner while initial loading is happening
   if (isLoading) {
     return <LoadingSpinner />;
   }
@@ -81,11 +119,7 @@ export function App() {
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       <AppProvider>
-        {!isOnline && (
-          <div className="bg-yellow-500 text-white p-2 text-center">
-            You are currently offline. Your changes will be saved locally and synced when you&apos;re back online.
-          </div>
-        )}
+        {!isOnline && <OfflineIndicator />}
 
         <ServiceWorkerRegistration />
         
