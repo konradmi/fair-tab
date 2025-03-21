@@ -7,6 +7,7 @@ import { Toaster } from "sonner";
 import { AppProvider } from "@/contexts/app-context";
 import Header from "@/components/header";
 import { ServiceWorkerRegistration } from "@/components/service-worker-registration";
+import { useAuth } from "@clerk/nextjs";
 
 // Page component imports
 import HomePage from "@/components/pages/home";
@@ -58,6 +59,27 @@ const ExpensesPage = () => {
   );
 };
 ExpensesPage.displayName = "ExpensesPage";
+
+// Auth Guard component to check authentication status and redirect if needed
+const AuthGuard = ({ children }: { children: React.ReactNode }) => {
+  const { isLoaded, isSignedIn } = useAuth();
+  const isBrowser = typeof window !== 'undefined';
+  
+  // Redirect logic
+  useEffect(() => {
+    if (isBrowser && isLoaded && !isSignedIn) {
+      window.location.href = '/sign-in';
+    }
+  }, [isBrowser, isLoaded, isSignedIn]);
+
+  // Show loading spinner while auth state is being determined
+  if (!isLoaded) {
+    return <LoadingSpinner />;
+  }
+
+  // If authenticated, show the children
+  return isSignedIn ? <>{children}</> : <LoadingSpinner />;
+};
 
 export function App() {
   const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
@@ -119,31 +141,33 @@ export function App() {
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       <AppProvider>
-        {!isOnline && <OfflineIndicator />}
+        <AuthGuard>
+          {!isOnline && <OfflineIndicator />}
 
-        <ServiceWorkerRegistration />
-        
-        <BrowserRouter>
-          <Header />
-          <main className="min-h-screen bg-background">
-            <Suspense fallback={<LoadingSpinner />}>
-              <Routes>
-                <Route path="/" element={<HomePage />} />
-                <Route path="/groups" element={<GroupsPage />} />
-                <Route path="/groups/new" element={<NewGroupPage />} />
-                <Route path="/groups/:id" element={<GroupDetailPage />} />
-                <Route path="/friends" element={<FriendsPage />} />
-                <Route path="/activity" element={<ActivityPage />} />
-                <Route path="/settings" element={<SettingsPage />} />
-                <Route path="/expenses" element={<ExpensesPage />} />
-                <Route path="/expenses/new" element={<NewExpensePage />} />
-                <Route path="/settle" element={<SettleUpPage />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </Suspense>
-          </main>
-          <Toaster position="top-center" />
-        </BrowserRouter>
+          <ServiceWorkerRegistration />
+          
+          <BrowserRouter>
+            <Header />
+            <main className="min-h-screen bg-background">
+              <Suspense fallback={<LoadingSpinner />}>
+                <Routes>
+                  <Route path="/" element={<HomePage />} />
+                  <Route path="/groups" element={<GroupsPage />} />
+                  <Route path="/groups/new" element={<NewGroupPage />} />
+                  <Route path="/groups/:id" element={<GroupDetailPage />} />
+                  <Route path="/friends" element={<FriendsPage />} />
+                  <Route path="/activity" element={<ActivityPage />} />
+                  <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="/expenses" element={<ExpensesPage />} />
+                  <Route path="/expenses/new" element={<NewExpensePage />} />
+                  <Route path="/settle" element={<SettleUpPage />} />
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </Suspense>
+            </main>
+            <Toaster position="top-center" />
+          </BrowserRouter>
+        </AuthGuard>
       </AppProvider>
     </ThemeProvider>
   );
