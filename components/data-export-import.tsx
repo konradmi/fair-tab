@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { toast } from "@/hooks/use-toast"
+import { toast } from "sonner"
 import { Download, Upload } from "lucide-react"
 
 export function DataExportImport() {
@@ -37,13 +37,11 @@ export function DataExportImport() {
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
 
-      toast({
-        title: "Data exported successfully",
+      toast.success("Data exported successfully", {
         description: "Your data has been exported to a JSON file.",
       })
-    } catch (error) {
-      toast({
-        title: "Export failed",
+    } catch {
+      toast.error("Export failed", {
         description: "There was an error exporting your data.",
       })
     }
@@ -62,8 +60,7 @@ export function DataExportImport() {
         if (data.friends) localStorage.setItem("fairtab_friends", data.friends)
         if (data.expenses) localStorage.setItem("fairtab_expenses", data.expenses)
 
-        toast({
-          title: "Data imported successfully",
+        toast.success("Data imported successfully", {
           description: "Your data has been imported. Please refresh the page.",
         })
 
@@ -71,9 +68,8 @@ export function DataExportImport() {
         setTimeout(() => {
           window.location.reload()
         }, 1500)
-      } catch (error) {
-        toast({
-          title: "Import failed",
+      } catch {
+        toast.error("Import failed", {
           description: "There was an error importing your data. Please check the file format.",
         })
       }

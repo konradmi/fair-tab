@@ -19,7 +19,7 @@ export default function BalanceSummary() {
     const currentUserId = friends[0]?.id
 
     if (currentUserId && balances[currentUserId]) {
-      Object.entries(balances[currentUserId]).forEach(([friendId, amount]) => {
+      Object.entries(balances[currentUserId]).forEach(([, amount]) => {
         if (amount > 0) {
           owed += amount
         } else if (amount < 0) {

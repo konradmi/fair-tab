@@ -21,7 +21,6 @@ export default function RootLayout({
       <head>
         <link rel="manifest" href="/manifest.json" />
         <link rel="icon" href="/favicon.ico" />
-        <link rel="stylesheet" href="/globals.css" />
       </head>
       <body className={inter.className}>
         {children}

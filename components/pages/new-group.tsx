@@ -62,8 +62,8 @@ export default function NewGroupPage() {
           <div className="space-y-2">
             <Label>Add Group Members</Label>
             <FriendSelector 
-              selectedFriendIds={selectedMembers} 
-              onChange={setSelectedMembers} 
+              selectedFriends={selectedMembers} 
+              onSelectionChange={setSelectedMembers} 
             />
           </div>
           

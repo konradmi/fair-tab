@@ -130,14 +130,14 @@ export function FriendSelector({ selectedFriends, onSelectionChange }: FriendSel
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Add a New Friend</DialogTitle>
-              <DialogDescription>Enter your friend's details to add them to your contacts.</DialogDescription>
+              <DialogDescription>Enter your friend&apos;s details to add them to your contacts.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Name</Label>
                 <Input
                   id="name"
-                  placeholder="Friend's name"
+                  placeholder="Friend&apos;s name"
                   value={newFriendName}
                   onChange={(e) => setNewFriendName(e.target.value)}
                 />
