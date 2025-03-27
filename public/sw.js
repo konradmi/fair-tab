@@ -1,17 +1,11 @@
 const CACHE_NAME = 'fairtab-v1';
 const ASSETS_TO_CACHE = [
   '/',
-  '/index.html',
-  '/favicon.ico',
   '/avatar-placeholder.svg',
   '/manifest.json',
   '/icons/icon-192x192.png',
   '/icons/icon-512x512.png',
   '/globals.css',
-  '/_next/static/chunks/main.js',
-  '/_next/static/chunks/webpack.js',
-  '/_next/static/chunks/app-client.js',
-  '/_next/static/css/app.css',
   '/images/avatar-placeholder.svg',
   // Add routes for page components
   '/groups',
@@ -21,47 +15,35 @@ const ASSETS_TO_CACHE = [
   '/settings',
   '/expenses',
   '/expenses/new',
-  '/settle'
+  '/settle',
 ];
 
 // Install event - cache the essential assets
 self.addEventListener('install', (event) => {
-  console.log('[Service Worker] Installing...');
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
-        console.log('[Service Worker] Caching app shell and content');
-        return cache.addAll(ASSETS_TO_CACHE).catch(error => {
-          console.error('[Service Worker] Pre-caching failed:', error);
-          // Continue even if some assets fail to cache
+        return cache.addAll(ASSETS_TO_CACHE).catch(() => {
           return Promise.resolve();
         });
       })
-      .then(() => {
-        console.log('[Service Worker] Install completed');
-        return self.skipWaiting();
-      })
+      .then(() => self.skipWaiting())
   );
 });
 
 // Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
-  console.log('[Service Worker] Activating...');
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames
           .filter((cacheName) => cacheName !== CACHE_NAME)
           .map((cacheName) => {
-            console.log('[Service Worker] Clearing old cache', cacheName);
             return caches.delete(cacheName);
           })
       );
     })
-    .then(() => {
-      console.log('[Service Worker] Now ready to handle fetches!');
-      return self.clients.claim();
-    })
+    .then(() => self.clients.claim())
   );
 });
 
@@ -133,6 +115,12 @@ function createOfflineFallbackResponse() {
           <p>If the app doesn't load in a few seconds, please check your connection and try again.</p>
           <button class="retry-button" onclick="window.location.reload()">Retry</button>
         </div>
+        <script>
+          // Check if we have a cached version of the app
+          setTimeout(() => {
+            window.location.href = '/';
+          }, 2000);
+        </script>
       </body>
     </html>
   `, {
@@ -143,10 +131,24 @@ function createOfflineFallbackResponse() {
   });
 }
 
+// Aggressively cache resources on first load
+function cacheResourcesOnFirstLoad() {
+  // This function will cache key resources needed for the app
+  // to work offline, focusing on the app shell and main content
+  return caches.open(CACHE_NAME).then(cache => {
+    return cache.addAll(ASSETS_TO_CACHE);
+  });
+}
+
+// When the service worker is first activated, cache important resources
+self.addEventListener('activate', event => {
+  event.waitUntil(cacheResourcesOnFirstLoad());
+});
+
 // Fetch event - handle all network requests
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-  
+
   // Skip non-GET requests and cross-origin requests
   if (event.request.method !== 'GET' || !url.origin.includes(self.location.origin)) {
     return;
@@ -170,28 +172,17 @@ self.addEventListener('fetch', (event) => {
         })
         .catch(() => {
           // If network fails, try to serve from cache
-          console.log('[Service Worker] Network request failed, falling back to cache for:', url.pathname);
+          if (isSPARoute(url.pathname)) {
+            return caches.match('/').then(rootResponse => {
+              if (rootResponse) return rootResponse;
+            })
+          }
+
           return caches.match(event.request)
             .then(cachedResponse => {
               // If we have a cached response, return it
-              if (cachedResponse) {
-                console.log('[Service Worker] Serving from cache:', url.pathname);
-                return cachedResponse;
-              }
-              
-              // If we don't have a cached response for this exact URL,
-              // try serving the root (/) which should contain the SPA shell
-              return caches.match('/')
-                .then(rootResponse => {
-                  if (rootResponse) {
-                    console.log('[Service Worker] Serving root from cache for SPA route:', url.pathname);
-                    return rootResponse;
-                  }
-                  
-                  // If we can't serve from cache at all, show the offline fallback
-                  console.log('[Service Worker] No cache available, showing offline page');
-                  return createOfflineFallbackResponse();
-                });
+              if (cachedResponse) return cachedResponse;
+              return createOfflineFallbackResponse();
             });
         })
     );
@@ -250,7 +241,6 @@ self.addEventListener('fetch', (event) => {
               return response;
             })
             .catch((error) => {
-              console.error(`[Service Worker] Fetch failed for ${url.pathname}:`, error);
               // For images, return a placeholder
               if (event.request.destination === 'image') {
                 return caches.match('/avatar-placeholder.svg');
@@ -278,17 +268,8 @@ self.addEventListener('fetch', (event) => {
         return response;
       })
       .catch(() => {
-        console.log(`[Service Worker] Falling back to cache for: ${url.pathname}`);
         return caches.match(event.request);
       })
   );
-});
-
-// Handle messages from clients
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    console.log('[Service Worker] Skip waiting commanded');
-    self.skipWaiting();
-  }
 });
 
