@@ -1,38 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useAuth } from "@clerk/nextjs";
+import { useEffect } from "react";
 import LoadingSpinner from "@/components/loading-spinner";
+import { useAppAuth } from "@/hooks/useAppAuth";
 
 const AuthGuard = ({ children }: { children: React.ReactNode }) => {
-  const { isLoaded, isSignedIn } = useAuth();
-  const [isOffline, setIsOffline] = useState(typeof navigator !== "undefined" ? !navigator.onLine : false);
+  const { isAuthenticated, isOnline, isLoading } = useAppAuth();
   
   useEffect(() => {
-    const handleOnline = () => setIsOffline(false);
-    const handleOffline = () => setIsOffline(true);
-    
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-    
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, []);
-  
-
-  useEffect(() => {
-    if (isLoaded && !isSignedIn && !isOffline) {
+    // Only redirect to sign-in if online and not authenticated
+    if (!isLoading && !isAuthenticated && isOnline) {
       window.location.href = '/sign-in';
     }
-  }, [isLoaded, isSignedIn, isOffline]);
-  
-  if (!isLoaded) {
+  }, [isLoading, isAuthenticated, isOnline]);
+
+  if (isLoading) {
     return <LoadingSpinner />;
   }
-
-  return isSignedIn ? <>{children}</> : 'Not authenticated'
+  return isAuthenticated ? <>{children}</> : 'Not authenticated'
 };
 
 export default AuthGuard;

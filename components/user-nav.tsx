@@ -12,19 +12,23 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Link } from "react-router-dom"
-import { useAuth, useUser } from "@clerk/nextjs"
+import { useAppAuth } from "@/hooks/useAppAuth"
 
 export function UserNav() {
-  const { signOut } = useAuth()
-  const { user, isLoaded } = useUser()
+  const { isOnline, user, signOut, isLoading, isAuthenticated } = useAppAuth()
 
   const handleSignOut = async () => {
-    await signOut()
-    // Redirect will be handled by the AuthGuard component in app.tsx
+    localStorage.removeItem('offlineAuthOk');
+    localStorage.removeItem('userEmail');
+    
+    if (isOnline && isAuthenticated) {
+        await signOut?.();
+    }
+    
+    window.location.href = '/sign-in';
   }
 
-  // Use a loading fallback while user data is loading
-  if (!isLoaded) {
+  if (isLoading && isOnline) {
     return (
       <Button variant="ghost" className="relative h-8 w-8 rounded-full">
         <Avatar className="h-8 w-8">
@@ -34,12 +38,22 @@ export function UserNav() {
     )
   }
 
-  // Get user display data from Clerk
-  const userName = user?.firstName ? 
-    (user.lastName ? `${user.firstName} ${user.lastName}` : user.firstName) : 
-    (user?.username || 'User')
-  const userEmail = user?.primaryEmailAddress?.emailAddress || ''
-  const userImage = user?.imageUrl
+  let userName = '';
+  let userEmail = '';
+  let userImage = '';
+  
+  if (isOnline && user) {
+    // Online mode: get data from Clerk
+    userName = user.firstName ? 
+      (user.lastName ? `${user.firstName} ${user.lastName}` : user.firstName) : 
+      (user?.username || 'User');
+    userEmail = user.primaryEmailAddress?.emailAddress || '';
+    userImage = user.imageUrl;
+  } else {
+    // Offline mode: get data from localStorage
+    userEmail = localStorage.getItem('userEmail') || '';
+    userName = userEmail.split('@')[0] || 'User';
+  }
 
   return (
     <DropdownMenu>
