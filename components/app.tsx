@@ -21,35 +21,21 @@ import SettingsPage from "@/components/pages/settings";
 import NewExpensePage from "@/components/pages/new-expense";
 import SettleUpPage from "@/components/pages/settle-up";
 import LoadingSpinner from "@/components/loading-spinner";
+import { useIsOnline } from "@/hooks/useIsOnline";
 
 export function App() {
-  const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
+  const isOnline = useIsOnline()
 
   // Service worker registration status
   const [swRegistered, setSwRegistered] = useState(false);
 
   useEffect(() => {
-    // Set up online/offline event listeners
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-
     // Check if service worker is active
     const checkServiceWorker = async () => {
       if ('serviceWorker' in navigator) {
         try {
           const registration = await navigator.serviceWorker.getRegistration();
           setSwRegistered(!!registration && !!registration.active);
-          
-          // Listen for messages from the service worker
-          navigator.serviceWorker.addEventListener('message', (event) => {
-            if (event.data && event.data.type === 'OFFLINE_MODE') {
-              console.log('Received offline mode notification from service worker');
-              setIsOnline(false);
-            }
-          });
         } catch (err) {
           console.error('Service worker check failed:', err);
           setSwRegistered(false);
@@ -58,19 +44,6 @@ export function App() {
     };
 
     checkServiceWorker();
-
-    // Check if there's a flag in localStorage indicating offline mode
-    // This is set by our service worker's offline fallback page
-    if (localStorage.getItem('fairtab_offline_mode')) {
-      setIsOnline(false);
-      // Clear the flag now that we've processed it
-      localStorage.removeItem('fairtab_offline_mode');
-    }
-
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
   }, [isOnline, swRegistered]);
 
   return (

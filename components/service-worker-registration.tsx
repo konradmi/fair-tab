@@ -53,7 +53,6 @@ export function ServiceWorkerRegistration() {
       navigator.serviceWorker
         .register("/sw.js")
         .then((registration) => {
-          console.log("Service Worker registered with scope:", registration.scope)
 
           // Check if there's a waiting service worker
           if (registration.waiting) {
@@ -81,7 +80,6 @@ export function ServiceWorkerRegistration() {
 
       // Handle controller change (when a new service worker takes over)
       navigator.serviceWorker.addEventListener("controllerchange", () => {
-        console.log("Service Worker controller changed - page will reload")
         // Optional: Reload the page for a clean state with new service worker
         // window.location.reload()
       })
