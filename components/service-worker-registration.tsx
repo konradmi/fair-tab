@@ -6,6 +6,46 @@ import { toast } from "sonner"
 export function ServiceWorkerRegistration() {
   const [waitingServiceWorker, setWaitingServiceWorker] = useState<ServiceWorker | null>(null)
   const [isUpdateAvailable, setIsUpdateAvailable] = useState(false)
+  const [wasOffline, setWasOffline] = useState(false)
+
+  useEffect(() => {
+    // Check if the app was previously offline
+    if (typeof window !== 'undefined') {
+      setWasOffline(localStorage.getItem('fairtab_was_offline') === 'true')
+    }
+
+    const handleOnline = () => {
+      if (wasOffline) {
+        // If we're coming back online after being offline, refresh the cache
+        toast.info("You're back online! Refreshing data...", {
+          duration: 3000,
+        })
+
+        // Remove the offline flag
+        localStorage.removeItem('fairtab_was_offline')
+        setWasOffline(false)
+
+        // Optional: If you want to automatically reload when coming back online
+        // window.location.reload()
+      }
+    }
+
+    const handleOffline = () => {
+      // Set a flag in localStorage to remember we were offline
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('fairtab_was_offline', 'true')
+        setWasOffline(true)
+      }
+    }
+
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [wasOffline])
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {

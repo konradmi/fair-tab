@@ -22,7 +22,6 @@ export default function RootLayout({
       <html lang="en" suppressHydrationWarning>
         <head>
           <link rel="manifest" href="/manifest.json" />
-          <link rel="icon" href="/favicon.ico" />
         </head>
         <body className={inter.className}>
           {children}
