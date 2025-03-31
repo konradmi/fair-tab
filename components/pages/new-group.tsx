@@ -9,6 +9,7 @@ import { useApp } from "@/contexts/app-context";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FriendSelector } from "@/components/friend-selector";
+import { toast } from "sonner";
 
 export default function NewGroupPage() {
   const { addGroup } = useApp();
@@ -16,16 +17,26 @@ export default function NewGroupPage() {
   const [groupName, setGroupName] = useState("");
   const [description, setDescription] = useState("");
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleCreateGroup = () => {
+  const handleCreateGroup = async () => {
     if (groupName.trim() && selectedMembers.length > 0) {
-      const newGroup = addGroup({
-        name: groupName.trim(),
-        description: description.trim(),
-        members: selectedMembers,
-        expenses: [],
-      });
-      navigate(`/groups/${newGroup.id}`);
+      setIsSubmitting(true);
+      try {
+        const newGroup = await addGroup({
+          name: groupName.trim(),
+          description: description.trim(),
+          members: selectedMembers,
+          expenses: [],
+        });
+        toast.success("Group created successfully");
+        navigate(`/groups/${newGroup.id}`);
+      } catch (error) {
+        console.error("Error creating group:", error);
+        toast.error("Failed to create group. Please try again.");
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -73,9 +84,9 @@ export default function NewGroupPage() {
             </Button>
             <Button 
               onClick={handleCreateGroup}
-              disabled={!groupName.trim() || selectedMembers.length === 0}
+              disabled={!groupName.trim() || selectedMembers.length === 0 || isSubmitting}
             >
-              Create Group
+              {isSubmitting ? "Creating..." : "Create Group"}
             </Button>
           </div>
         </CardContent>

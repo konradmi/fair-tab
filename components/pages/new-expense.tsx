@@ -8,6 +8,7 @@ import { useApp } from "@/contexts/app-context";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "sonner";
 
 export default function NewExpensePage() {
   const { addExpense, groups, friends } = useApp();
@@ -16,23 +17,33 @@ export default function NewExpensePage() {
   const [amount, setAmount] = useState("");
   const [groupId, setGroupId] = useState("");
   const [paidById, setPaidById] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const selectedGroup = groups.find(g => g.id === groupId);
 
-  const handleCreateExpense = () => {
+  const handleCreateExpense = async () => {
     if (description && amount && groupId && paidById) {
       const parsedAmount = parseFloat(amount);
       
       if (!isNaN(parsedAmount) && parsedAmount > 0) {
-        addExpense({
-          description,
-          amount: parsedAmount,
-          paidById,
-          groupId,
-          splitAmong: selectedGroup?.members || [],
-        });
-        
-        navigate(`/groups/${groupId}`);
+        setIsSubmitting(true);
+        try {
+          await addExpense({
+            description,
+            amount: parsedAmount,
+            paidById,
+            groupId,
+            splitAmong: selectedGroup?.members || [],
+          });
+          
+          toast.success("Expense added successfully");
+          navigate(`/groups/${groupId}`);
+        } catch (error) {
+          console.error("Error adding expense:", error);
+          toast.error("Failed to add expense. Please try again.");
+        } finally {
+          setIsSubmitting(false);
+        }
       }
     }
   };
@@ -107,9 +118,9 @@ export default function NewExpensePage() {
             </Button>
             <Button 
               onClick={handleCreateExpense}
-              disabled={!description || !amount || !groupId || !paidById}
+              disabled={!description || !amount || !groupId || !paidById || isSubmitting}
             >
-              Save Expense
+              {isSubmitting ? "Saving..." : "Save Expense"}
             </Button>
           </div>
         </CardContent>

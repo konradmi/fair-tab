@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Badge } from "@/components/ui/badge"
 import { useApp } from "@/contexts/app-context"
+import { toast } from "sonner"
 
 interface FriendSelectorProps {
   selectedFriends: string[]
@@ -31,6 +32,7 @@ export function FriendSelector({ selectedFriends, onSelectionChange }: FriendSel
   const [dialogOpen, setDialogOpen] = useState(false)
   const [newFriendEmail, setNewFriendEmail] = useState("")
   const [newFriendName, setNewFriendName] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleSelect = (friendId: string) => {
     if (selectedFriends.includes(friendId)) {
@@ -40,17 +42,31 @@ export function FriendSelector({ selectedFriends, onSelectionChange }: FriendSel
     }
   }
 
-  const handleAddFriend = () => {
+  const handleAddFriend = async () => {
     if (newFriendName && newFriendEmail) {
-      addFriend({
-        name: newFriendName,
-        email: newFriendEmail,
-        avatar: "/avatar-placeholder.svg",
-      })
+      setIsSubmitting(true)
+      try {
+        const newFriend = await addFriend({
+          name: newFriendName,
+          email: newFriendEmail,
+          avatar: "/avatar-placeholder.svg",
+        })
 
-      setNewFriendName("")
-      setNewFriendEmail("")
-      setDialogOpen(false)
+        // Automatically select the newly added friend
+        if (!selectedFriends.includes(newFriend.id)) {
+          onSelectionChange([...selectedFriends, newFriend.id])
+        }
+
+        toast.success("Friend added successfully")
+        setNewFriendName("")
+        setNewFriendEmail("")
+        setDialogOpen(false)
+      } catch (error) {
+        console.error("Error adding friend:", error)
+        toast.error("Failed to add friend. Please try again.")
+      } finally {
+        setIsSubmitting(false)
+      }
     }
   }
 
@@ -157,7 +173,9 @@ export function FriendSelector({ selectedFriends, onSelectionChange }: FriendSel
               <Button variant="outline" onClick={() => setDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleAddFriend}>Add Friend</Button>
+              <Button onClick={handleAddFriend} disabled={isSubmitting}>
+                {isSubmitting ? "Adding..." : "Add Friend"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
