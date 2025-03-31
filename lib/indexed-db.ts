@@ -1,84 +1,29 @@
 "use client"
 
+import Dexie, { Table } from 'dexie';
 import { Friend, Group, Expense } from './types';
 
-// Database configuration
-const DB_NAME = 'fairtabDB';
-const DB_VERSION = 1;
+class FairTabDatabase extends Dexie {
+  friends!: Table<Friend, string>;
+  groups!: Table<Group, string>;
+  expenses!: Table<Expense, string>;
 
-// Store names
-const STORES = {
-  FRIENDS: 'friends',
-  GROUPS: 'groups',
-  EXPENSES: 'expenses',
-};
+  constructor() {
+    super('fairtabDB');
+    
+    this.version(1).stores({
+      friends: 'id, email, name',
+      groups: 'id, name',
+      expenses: 'id, groupId, paidById, date'
+    });
+  }
+}
 
-// Open database connection
-const openDB = (): Promise<IDBDatabase> => {
-  return new Promise((resolve, reject) => {
-    if (!('indexedDB' in window)) {
-      reject(new Error('IndexedDB is not supported in this browser'));
-      return;
-    }
+export const db = new FairTabDatabase();
 
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-    request.onerror = () => {
-      reject(new Error('Error opening database'));
-    };
-
-    request.onsuccess = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
-      resolve(db);
-    };
-
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
-      
-      // Create friends store
-      if (!db.objectStoreNames.contains(STORES.FRIENDS)) {
-        const friendsStore = db.createObjectStore(STORES.FRIENDS, { keyPath: 'id' });
-        friendsStore.createIndex('email', 'email', { unique: true });
-        friendsStore.createIndex('name', 'name', { unique: false });
-      }
-      
-      // Create groups store
-      if (!db.objectStoreNames.contains(STORES.GROUPS)) {
-        const groupsStore = db.createObjectStore(STORES.GROUPS, { keyPath: 'id' });
-        groupsStore.createIndex('name', 'name', { unique: false });
-      }
-      
-      // Create expenses store
-      if (!db.objectStoreNames.contains(STORES.EXPENSES)) {
-        const expensesStore = db.createObjectStore(STORES.EXPENSES, { keyPath: 'id' });
-        expensesStore.createIndex('groupId', 'groupId', { unique: false });
-        expensesStore.createIndex('paidById', 'paidById', { unique: false });
-        expensesStore.createIndex('date', 'date', { unique: false });
-      }
-    };
-  });
-};
-
-// Helper to generate a transaction and get the store
-const getStore = async (storeName: string, mode: IDBTransactionMode = 'readonly'): Promise<IDBObjectStore> => {
-  const db = await openDB();
-  const transaction = db.transaction(storeName, mode);
-  return transaction.objectStore(storeName);
-};
-
-// Generic function to execute a request and return a promise
-const executeRequest = <T>(request: IDBRequest<T>): Promise<T> => {
-  return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-};
-
-// Friends CRUD operations
 export const getAllFriends = async (): Promise<Friend[]> => {
   try {
-    const store = await getStore(STORES.FRIENDS);
-    return executeRequest(store.getAll());
+    return await db.friends.toArray();
   } catch (error) {
     console.error('Error getting friends:', error);
     return [];
@@ -87,8 +32,7 @@ export const getAllFriends = async (): Promise<Friend[]> => {
 
 export const getFriendById = async (id: string): Promise<Friend | undefined> => {
   try {
-    const store = await getStore(STORES.FRIENDS);
-    return executeRequest(store.get(id));
+    return await db.friends.get(id);
   } catch (error) {
     console.error(`Error getting friend with id ${id}:`, error);
     return undefined;
@@ -97,8 +41,7 @@ export const getFriendById = async (id: string): Promise<Friend | undefined> => 
 
 export const saveFriend = async (friend: Friend): Promise<Friend> => {
   try {
-    const store = await getStore(STORES.FRIENDS, 'readwrite');
-    await executeRequest(store.put(friend));
+    await db.friends.put(friend);
     return friend;
   } catch (error) {
     console.error('Error saving friend:', error);
@@ -108,19 +51,16 @@ export const saveFriend = async (friend: Friend): Promise<Friend> => {
 
 export const deleteFriend = async (id: string): Promise<void> => {
   try {
-    const store = await getStore(STORES.FRIENDS, 'readwrite');
-    await executeRequest(store.delete(id));
+    await db.friends.delete(id);
   } catch (error) {
     console.error(`Error deleting friend with id ${id}:`, error);
     throw error;
   }
 };
 
-// Groups CRUD operations
 export const getAllGroups = async (): Promise<Group[]> => {
   try {
-    const store = await getStore(STORES.GROUPS);
-    return executeRequest(store.getAll());
+    return await db.groups.toArray();
   } catch (error) {
     console.error('Error getting groups:', error);
     return [];
@@ -129,8 +69,7 @@ export const getAllGroups = async (): Promise<Group[]> => {
 
 export const getGroupById = async (id: string): Promise<Group | undefined> => {
   try {
-    const store = await getStore(STORES.GROUPS);
-    return executeRequest(store.get(id));
+    return await db.groups.get(id);
   } catch (error) {
     console.error(`Error getting group with id ${id}:`, error);
     return undefined;
@@ -139,8 +78,7 @@ export const getGroupById = async (id: string): Promise<Group | undefined> => {
 
 export const saveGroup = async (group: Group): Promise<Group> => {
   try {
-    const store = await getStore(STORES.GROUPS, 'readwrite');
-    await executeRequest(store.put(group));
+    await db.groups.put(group);
     return group;
   } catch (error) {
     console.error('Error saving group:', error);
@@ -150,19 +88,16 @@ export const saveGroup = async (group: Group): Promise<Group> => {
 
 export const deleteGroup = async (id: string): Promise<void> => {
   try {
-    const store = await getStore(STORES.GROUPS, 'readwrite');
-    await executeRequest(store.delete(id));
+    await db.groups.delete(id);
   } catch (error) {
     console.error(`Error deleting group with id ${id}:`, error);
     throw error;
   }
 };
 
-// Expenses CRUD operations
 export const getAllExpenses = async (): Promise<Expense[]> => {
   try {
-    const store = await getStore(STORES.EXPENSES);
-    return executeRequest(store.getAll());
+    return await db.expenses.toArray();
   } catch (error) {
     console.error('Error getting expenses:', error);
     return [];
@@ -171,8 +106,7 @@ export const getAllExpenses = async (): Promise<Expense[]> => {
 
 export const getExpenseById = async (id: string): Promise<Expense | undefined> => {
   try {
-    const store = await getStore(STORES.EXPENSES);
-    return executeRequest(store.get(id));
+    return await db.expenses.get(id);
   } catch (error) {
     console.error(`Error getting expense with id ${id}:`, error);
     return undefined;
@@ -181,8 +115,7 @@ export const getExpenseById = async (id: string): Promise<Expense | undefined> =
 
 export const saveExpense = async (expense: Expense): Promise<Expense> => {
   try {
-    const store = await getStore(STORES.EXPENSES, 'readwrite');
-    await executeRequest(store.put(expense));
+    await db.expenses.put(expense);
     return expense;
   } catch (error) {
     console.error('Error saving expense:', error);
@@ -192,31 +125,26 @@ export const saveExpense = async (expense: Expense): Promise<Expense> => {
 
 export const deleteExpense = async (id: string): Promise<void> => {
   try {
-    const store = await getStore(STORES.EXPENSES, 'readwrite');
-    await executeRequest(store.delete(id));
+    await db.expenses.delete(id);
   } catch (error) {
     console.error(`Error deleting expense with id ${id}:`, error);
     throw error;
   }
 };
 
-// Helper function to get expenses for a specific group
 export const getExpensesByGroupId = async (groupId: string): Promise<Expense[]> => {
   try {
-    const store = await getStore(STORES.EXPENSES);
-    const index = store.index('groupId');
-    return executeRequest(index.getAll(IDBKeyRange.only(groupId)));
+    return await db.expenses.where('groupId').equals(groupId).toArray();
   } catch (error) {
     console.error(`Error getting expenses for group ${groupId}:`, error);
     return [];
   }
 };
 
-// Balance calculation
 export const calculateBalances = async (): Promise<Record<string, Record<string, number>>> => {
   try {
-    const expenses = await getAllExpenses();
-    const friends = await getAllFriends();
+    const expenses = await db.expenses.toArray();
+    const friends = await db.friends.toArray();
     const balances: Record<string, Record<string, number>> = {};
 
     // Initialize balances

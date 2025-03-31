@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { DataExportImport } from "@/components/data-export-import";
 
 export default function SettingsPage() {
   return (
@@ -87,20 +88,14 @@ export default function SettingsPage() {
                 </div>
               </div>
               
-              <div className="space-y-2">
-                <Label>Export Data</Label>
-                <p className="text-sm text-muted-foreground">
-                  Export all your data as a JSON file for backup
-                </p>
-                <Button variant="outline" size="sm">Export Data</Button>
-              </div>
-              
-              <div className="space-y-2">
-                <Label>Import Data</Label>
-                <p className="text-sm text-muted-foreground">
-                  Import data from a previously exported JSON file
-                </p>
-                <Button variant="outline" size="sm">Import Data</Button>
+              <div className="space-y-4">
+                <div>
+                  <Label className="mb-2 block">Data Backup & Restore</Label>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Export your data for backup or import from a previously exported file
+                  </p>
+                  <DataExportImport />
+                </div>
               </div>
             </CardContent>
           </Card>

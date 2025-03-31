@@ -15,16 +15,25 @@ import {
 } from "@/components/ui/dialog"
 import { toast } from "sonner"
 import { Download, Upload } from "lucide-react"
+import * as db from "@/lib/indexed-db"
+import { type Expense, type Friend, type Group } from "@/lib/types"
 
 export function DataExportImport() {
   const [importDialogOpen, setImportDialogOpen] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
 
-  const handleExport = () => {
+  const handleExport = async () => {
+    setIsLoading(true)
     try {
+      // Fetch all data from IndexedDB
+      const groups = await db.getAllGroups()
+      const friends = await db.getAllFriends()
+      const expenses = await db.getAllExpenses()
+
       const data = {
-        groups: localStorage.getItem("fairtab_groups"),
-        friends: localStorage.getItem("fairtab_friends"),
-        expenses: localStorage.getItem("fairtab_expenses"),
+        groups,
+        friends, 
+        expenses
       }
 
       const blob = new Blob([JSON.stringify(data)], { type: "application/json" })
@@ -40,10 +49,13 @@ export function DataExportImport() {
       toast.success("Data exported successfully", {
         description: "Your data has been exported to a JSON file.",
       })
-    } catch {
+    } catch (error) {
+      console.error("Export error:", error)
       toast.error("Export failed", {
         description: "There was an error exporting your data.",
       })
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -51,14 +63,32 @@ export function DataExportImport() {
     const file = event.target.files?.[0]
     if (!file) return
 
+    setIsLoading(true)
     const reader = new FileReader()
-    reader.onload = (e) => {
+    
+    reader.onload = async (e) => {
       try {
         const data = JSON.parse(e.target?.result as string)
-
-        if (data.groups) localStorage.setItem("fairtab_groups", data.groups)
-        if (data.friends) localStorage.setItem("fairtab_friends", data.friends)
-        if (data.expenses) localStorage.setItem("fairtab_expenses", data.expenses)
+        
+        // Clear existing data
+        await Promise.all([
+          db.db.friends.clear(),
+          db.db.groups.clear(),
+          db.db.expenses.clear()
+        ])
+        
+        // Import data from file
+        if (data.friends && Array.isArray(data.friends)) {
+          await db.db.friends.bulkPut(data.friends as Friend[])
+        }
+        
+        if (data.groups && Array.isArray(data.groups)) {
+          await db.db.groups.bulkPut(data.groups as Group[])
+        }
+        
+        if (data.expenses && Array.isArray(data.expenses)) {
+          await db.db.expenses.bulkPut(data.expenses as Expense[])
+        }
 
         toast.success("Data imported successfully", {
           description: "Your data has been imported. Please refresh the page.",
@@ -68,10 +98,13 @@ export function DataExportImport() {
         setTimeout(() => {
           window.location.reload()
         }, 1500)
-      } catch {
+      } catch (error) {
+        console.error("Import error:", error)
         toast.error("Import failed", {
           description: "There was an error importing your data. Please check the file format.",
         })
+      } finally {
+        setIsLoading(false)
       }
     }
 
@@ -81,16 +114,25 @@ export function DataExportImport() {
 
   return (
     <div className="flex gap-2">
-      <Button variant="outline" size="sm" onClick={handleExport}>
+      <Button 
+        variant="outline" 
+        size="sm" 
+        onClick={handleExport} 
+        disabled={isLoading}
+      >
         <Download className="mr-2 h-4 w-4" />
-        Export Data
+        {isLoading ? "Exporting..." : "Export Data"}
       </Button>
 
       <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
         <DialogTrigger asChild>
-          <Button variant="outline" size="sm">
+          <Button 
+            variant="outline" 
+            size="sm"
+            disabled={isLoading}
+          >
             <Upload className="mr-2 h-4 w-4" />
-            Import Data
+            {isLoading ? "Importing..." : "Import Data"}
           </Button>
         </DialogTrigger>
         <DialogContent>
