@@ -16,26 +16,37 @@ export default function HomePage() {
 
   // Calculate total balance for each group
   useEffect(() => {
-    const balances = getBalances();
-    const groupTotals: Record<string, number> = {};
+    const calculateBalances = async () => {
+      try {
+        const balances = await getBalances();
+        const groupTotals: Record<string, number> = {};
 
-    groups.forEach((group) => {
-      let total = 0;
-      // Assuming the first member is the current user for this example
-      const currentUserId = group.members[0];
+        groups.forEach((group) => {
+          let total = 0;
+          // Assuming the first member is the current user for this example
+          const currentUserId = group.members[0];
 
-      if (currentUserId) {
-        group.members.forEach((memberId) => {
-          if (memberId !== currentUserId) {
-            total += balances[currentUserId]?.[memberId] || 0;
+          if (currentUserId) {
+            group.members.forEach((memberId) => {
+              if (memberId !== currentUserId) {
+                // Using optional chaining to safely access nested properties
+                total += (balances[currentUserId]?.[memberId] || 0);
+              }
+            });
           }
+
+          groupTotals[group.id] = total;
         });
+
+        setGroupBalances(groupTotals);
+      } catch (error) {
+        console.error("Error calculating balances:", error);
+        // Set empty balances in case of error
+        setGroupBalances({});
       }
+    };
 
-      groupTotals[group.id] = total;
-    });
-
-    setGroupBalances(groupTotals);
+    calculateBalances();
   }, [groups, getBalances]);
 
   return (

@@ -5,17 +5,54 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useApp } from "@/contexts/app-context";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { useEffect, useState } from "react";
 
 export default function SettleUpPage() {
   const { friends, getBalances } = useApp();
-  const balances = getBalances();
+  const [balances, setBalances] = useState<Record<string, Record<string, number>>>({});
+  const [isLoading, setIsLoading] = useState(true);
   const currentUserId = friends[0]?.id; // Assuming first friend is current user
+  
+  useEffect(() => {
+    const fetchBalances = async () => {
+      try {
+        setIsLoading(true);
+        const balanceData = await getBalances();
+        setBalances(balanceData);
+      } catch (error) {
+        console.error("Error fetching balances:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchBalances();
+  }, [getBalances]);
   
   // Get friends who you owe money to or who owe you money
   const settleUpFriends = friends.filter(friend => 
     friend.id !== currentUserId && 
-    balances[currentUserId]?.[friend.id] !== 0
+    balances[currentUserId]?.[friend.id] !== 0 &&
+    balances[currentUserId]?.[friend.id] !== undefined
   );
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <h1 className="text-2xl font-bold mb-6">Settle Up</h1>
+        <Card>
+          <CardHeader>
+            <CardTitle>Who do you want to settle up with?</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex justify-center py-10">
+              <div className="animate-pulse text-muted-foreground">Loading balances...</div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 py-8">
