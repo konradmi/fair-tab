@@ -9,7 +9,6 @@ export type Group = {
 }
 
 export type Friend = {
-  id: string
   name: string
   email: string
   avatar?: string
@@ -20,10 +19,12 @@ export type Expense = {
   description: string
   amount: number
   paidById: string
+  paidByEmail: string
   groupId: string
   splitAmong: string[]
   date: string
 }
 
-// Helper function to generate IDs
-export const generateId = (): string => Math.random().toString(36).substring(2, 9); 
+export const generateId = () => {
+  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+} 

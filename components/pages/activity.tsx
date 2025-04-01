@@ -21,7 +21,7 @@ export default function ActivityPage() {
           <div className="space-y-6">
             {sortedExpenses.length > 0 ? (
               sortedExpenses.map(expense => {
-                const paidBy = friends.find(f => f.id === expense.paidById);
+                const paidBy = friends.find(f => f.email === expense.paidByEmail);
                 const group = groups.find(g => g.id === expense.groupId);
                 
                 return (
@@ -46,9 +46,9 @@ export default function ActivityPage() {
                       
                       <div className="mt-2 text-sm">
                         <span className="text-muted-foreground">Split among: </span>
-                        {expense.splitAmong.map(id => {
-                          const person = friends.find(f => f.id === id);
-                          return person?.name;
+                        {expense.splitAmong.map(email => {
+                          const person = friends.find(f => f.email === email);
+                          return person?.name || email;
                         }).join(", ")}
                       </div>
                     </div>

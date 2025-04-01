@@ -5,24 +5,35 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useApp } from "@/contexts/app-context";
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 
 export default function NewExpensePage() {
   const { addExpense, groups, friends } = useApp();
   const navigate = useNavigate();
+  const location = useLocation();
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [groupId, setGroupId] = useState("");
-  const [paidById, setPaidById] = useState("");
+  const [paidByEmail, setPaidByEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Check if groupId is provided in URL parameters
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const groupIdParam = params.get("groupId");
+    if (groupIdParam) {
+      setGroupId(groupIdParam);
+    }
+  }, [location.search]);
+
   const selectedGroup = groups.find(g => g.id === groupId);
+  const comingFromGroup = new URLSearchParams(location.search).has("groupId");
 
   const handleCreateExpense = async () => {
-    if (description && amount && groupId && paidById) {
+    if (description && amount && groupId && paidByEmail) {
       const parsedAmount = parseFloat(amount);
       
       if (!isNaN(parsedAmount) && parsedAmount > 0) {
@@ -31,7 +42,8 @@ export default function NewExpensePage() {
           await addExpense({
             description,
             amount: parsedAmount,
-            paidById,
+            paidByEmail,
+            paidById: "",
             groupId,
             splitAmong: selectedGroup?.members || [],
           });
@@ -80,31 +92,33 @@ export default function NewExpensePage() {
             />
           </div>
           
-          <div className="space-y-2">
-            <Label htmlFor="group">Group</Label>
-            <Select value={groupId} onValueChange={setGroupId}>
-              <SelectTrigger id="group">
-                <SelectValue placeholder="Select a group" />
-              </SelectTrigger>
-              <SelectContent>
-                {groups.map(group => (
-                  <SelectItem key={group.id} value={group.id}>
-                    {group.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {!comingFromGroup && (
+            <div className="space-y-2">
+              <Label htmlFor="group">Group</Label>
+              <Select value={groupId} onValueChange={setGroupId}>
+                <SelectTrigger id="group">
+                  <SelectValue placeholder="Select a group" />
+                </SelectTrigger>
+                <SelectContent>
+                  {groups.map(group => (
+                    <SelectItem key={group.id} value={group.id}>
+                      {group.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           
           <div className="space-y-2">
             <Label htmlFor="paidBy">Paid By</Label>
-            <Select value={paidById} onValueChange={setPaidById}>
+            <Select value={paidByEmail} onValueChange={setPaidByEmail}>
               <SelectTrigger id="paidBy">
                 <SelectValue placeholder="Who paid?" />
               </SelectTrigger>
               <SelectContent>
                 {friends.map(friend => (
-                  <SelectItem key={friend.id} value={friend.id}>
+                  <SelectItem key={friend.email} value={friend.email}>
                     {friend.name}
                   </SelectItem>
                 ))}
@@ -118,7 +132,7 @@ export default function NewExpensePage() {
             </Button>
             <Button 
               onClick={handleCreateExpense}
-              disabled={!description || !amount || !groupId || !paidById || isSubmitting}
+              disabled={!description || !amount || !groupId || !paidByEmail || isSubmitting}
             >
               {isSubmitting ? "Saving..." : "Save Expense"}
             </Button>

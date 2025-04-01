@@ -4,9 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowDown, ArrowUp } from "lucide-react"
 import { useApp } from "@/contexts/app-context"
 import { useEffect, useState } from "react"
+import { useAppAuth } from "@/hooks/useAppAuth"
 
 export default function BalanceSummary() {
-  const { friends, getBalances } = useApp()
+  const { getBalances } = useApp()
+  const { userEmail } = useAppAuth()
   const [totalOwed, setTotalOwed] = useState(0)
   const [totalOwe, setTotalOwe] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
@@ -19,15 +21,16 @@ export default function BalanceSummary() {
         let owed = 0
         let owe = 0
 
-        // Assuming the first friend is the current user for this example
-        const currentUserId = friends[0]?.id
-
-        if (currentUserId && balances[currentUserId]) {
-          Object.entries(balances[currentUserId]).forEach(([, amount]) => {
+        if (userEmail && balances[userEmail]) {
+          Object.entries(balances[userEmail]).forEach(([, amount]) => {
+            // Positive value means the current user owes money to this member
+            // Negative value means this member owes money to the current user
             if (amount > 0) {
-              owed += amount
+              // User owes money
+              owe += amount
             } else if (amount < 0) {
-              owe += Math.abs(amount)
+              // User is owed money
+              owed += Math.abs(amount)
             }
           })
         }
@@ -42,7 +45,7 @@ export default function BalanceSummary() {
     }
 
     calculateBalances()
-  }, [friends, getBalances])
+  }, [userEmail, getBalances])
 
   const totalBalance = totalOwed - totalOwe
 

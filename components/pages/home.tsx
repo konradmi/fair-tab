@@ -9,31 +9,41 @@ import { useApp } from "@/contexts/app-context";
 import { useEffect, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { useAppAuth } from "@/hooks/useAppAuth";
 
 export default function HomePage() {
   const { groups, friends, getBalances } = useApp();
+  const { userEmail } = useAppAuth();
   const [groupBalances, setGroupBalances] = useState<Record<string, number>>({});
 
   // Calculate total balance for each group
   useEffect(() => {
     const calculateBalances = async () => {
+      if (!userEmail) return;
+
       try {
         const balances = await getBalances();
         const groupTotals: Record<string, number> = {};
 
         groups.forEach((group) => {
           let total = 0;
-          // Assuming the first member is the current user for this example
-          const currentUserId = group.members[0];
 
-          if (currentUserId) {
-            group.members.forEach((memberId) => {
-              if (memberId !== currentUserId) {
-                // Using optional chaining to safely access nested properties
-                total += (balances[currentUserId]?.[memberId] || 0);
-              }
-            });
+          // Skip if current user is not a member of this group
+          if (!group.members.includes(userEmail)) {
+            groupTotals[group.id] = 0;
+            return;
           }
+
+          // Calculate balances for all other members in this group
+          group.members.forEach((memberEmail) => {
+            if (memberEmail !== userEmail) {
+              // Using optional chaining to safely access nested properties
+              // Positive value means current user owes money to this member
+              // Negative value means this member owes money to current user
+              const amount = balances[userEmail]?.[memberEmail] || 0;
+              total += amount;
+            }
+          });
 
           groupTotals[group.id] = total;
         });
@@ -47,7 +57,7 @@ export default function HomePage() {
     };
 
     calculateBalances();
-  }, [groups, getBalances]);
+  }, [groups, userEmail, getBalances]);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -75,10 +85,10 @@ export default function HomePage() {
                       <div className="flex items-center justify-between p-4 rounded-lg border hover:bg-accent/50 transition-colors">
                         <div className="flex items-center gap-4">
                           <div className="flex -space-x-2">
-                            {group.members.slice(0, 3).map((memberId) => {
-                              const member = friends.find((f) => f.id === memberId);
+                            {group.members.slice(0, 3).map((memberEmail) => {
+                              const member = friends.find((f) => f.email === memberEmail);
                               return (
-                                <Avatar key={memberId} className="border-2 border-background h-8 w-8">
+                                <Avatar key={memberEmail} className="border-2 border-background h-8 w-8">
                                   <AvatarImage
                                     src={member?.avatar || "/avatar-placeholder.svg"}
                                     alt={member?.name || "Member"}
@@ -100,8 +110,8 @@ export default function HomePage() {
                         </div>
                         <div className="flex items-center gap-2">
                           {groupBalances[group.id] !== 0 ? (
-                            <Badge variant={groupBalances[group.id] > 0 ? "default" : "destructive"}>
-                              {groupBalances[group.id] > 0 ? "+" : "-"}${Math.abs(groupBalances[group.id]).toFixed(2)}
+                            <Badge variant={groupBalances[group.id] > 0 ? "destructive" : "default"}>
+                              {groupBalances[group.id] > 0 ? "-" : "+"}${Math.abs(groupBalances[group.id]).toFixed(2)}
                             </Badge>
                           ) : (
                             <Badge variant="outline">Settled up</Badge>

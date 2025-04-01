@@ -52,9 +52,8 @@ export function FriendSelector({ selectedFriends, onSelectionChange }: FriendSel
           avatar: "/avatar-placeholder.svg",
         })
 
-        // Automatically select the newly added friend
-        if (!selectedFriends.includes(newFriend.id)) {
-          onSelectionChange([...selectedFriends, newFriend.id])
+        if (!selectedFriends.includes(newFriend.email)) {
+          onSelectionChange([...selectedFriends, newFriend.email])
         }
 
         toast.success("Friend added successfully")
@@ -77,18 +76,18 @@ export function FriendSelector({ selectedFriends, onSelectionChange }: FriendSel
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
-        {selectedFriends.map((friendId) => {
-          const friend = friends.find((f) => f.id === friendId)
+        {selectedFriends.map((friendEmail) => {
+          const friend = friends.find((f) => f.email === friendEmail)
           if (!friend) return null
 
           return (
-            <Badge key={friend.id} variant="secondary" className="flex items-center gap-1">
+            <Badge key={friend.email} variant="secondary" className="flex items-center gap-1">
               <span>{friend.name}</span>
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-4 w-4 rounded-full"
-                onClick={() => removeFriend(friend.id)}
+                onClick={() => removeFriend(friend.email)}
               >
                 <X className="h-3 w-3" />
               </Button>
@@ -113,8 +112,8 @@ export function FriendSelector({ selectedFriends, onSelectionChange }: FriendSel
                 <CommandGroup>
                   {friends.map((friend) => (
                     <CommandItem
-                      key={friend.id}
-                      onSelect={() => handleSelect(friend.id)}
+                      key={friend.email}
+                      onSelect={() => handleSelect(friend.email)}
                       className="flex items-center gap-2"
                     >
                       <Avatar className="h-6 w-6">
@@ -126,7 +125,7 @@ export function FriendSelector({ selectedFriends, onSelectionChange }: FriendSel
                         <p className="text-xs text-muted-foreground">{friend.email}</p>
                       </div>
                       <div className="flex h-4 w-4 items-center justify-center">
-                        {selectedFriends.includes(friend.id) && <Check className="h-4 w-4" />}
+                        {selectedFriends.includes(friend.email) && <Check className="h-4 w-4" />}
                       </div>
                     </CommandItem>
                   ))}
