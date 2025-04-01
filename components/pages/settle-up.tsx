@@ -6,12 +6,13 @@ import { useApp } from "@/contexts/app-context";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useEffect, useState } from "react";
+import { useAppAuth } from "@/hooks/useAppAuth";
 
 export default function SettleUpPage() {
   const { friends, getBalances } = useApp();
+  const { userEmail } = useAppAuth();
   const [balances, setBalances] = useState<Record<string, Record<string, number>>>({});
   const [isLoading, setIsLoading] = useState(true);
-  const currentUserId = friends[0]?.id; // Assuming first friend is current user
   
   useEffect(() => {
     const fetchBalances = async () => {
@@ -29,12 +30,10 @@ export default function SettleUpPage() {
     fetchBalances();
   }, [getBalances]);
   
-  // Get friends who you owe money to or who owe you money
-  const settleUpFriends = friends.filter(friend => 
-    friend.id !== currentUserId && 
-    balances[currentUserId]?.[friend.id] !== 0 &&
-    balances[currentUserId]?.[friend.id] !== undefined
-  );
+  // Get all friends except the current user
+  const settleUpFriends = userEmail 
+    ? friends.filter(friend => friend.email !== userEmail)
+    : [];
 
   if (isLoading) {
     return (
@@ -66,11 +65,38 @@ export default function SettleUpPage() {
           <div className="space-y-4">
             {settleUpFriends.length > 0 ? (
               settleUpFriends.map(friend => {
-                const balance = balances[currentUserId]?.[friend.id] || 0;
-                const isPositive = balance > 0;
+                // Get balance between current user and this friend
+                // We need to invert the balance to match the expected display
+                // In the raw data, positive means user owes the friend, negative means friend owes the user
+                // We're going to invert this for display so positive shows what friends owe the user
+                const rawBalance = userEmail ? (balances[userEmail]?.[friend.email] || 0) : 0;
+                const displayBalance = -rawBalance; // Invert the balance for display
+                
+                // If balance is 0, show "settled up"
+                if (displayBalance === 0) {
+                  return (
+                    <div key={friend.email} className="flex items-center justify-between p-4 rounded-lg border">
+                      <div className="flex items-center gap-3">
+                        <Avatar>
+                          <AvatarImage src={friend.avatar || "/avatar-placeholder.svg"} alt={friend.name} />
+                          <AvatarFallback>{friend.name.charAt(0)}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-medium">{friend.name}</p>
+                          <p className="text-sm text-muted-foreground">All settled up</p>
+                        </div>
+                      </div>
+                      <Badge variant="outline">Settled</Badge>
+                    </div>
+                  );
+                }
+                
+                // For displaying, positive means friend owes user
+                // negative means user owes friend
+                const friendOwesUser = displayBalance > 0;
                 
                 return (
-                  <div key={friend.id} className="flex items-center justify-between p-4 rounded-lg border">
+                  <div key={friend.email} className="flex items-center justify-between p-4 rounded-lg border">
                     <div className="flex items-center gap-3">
                       <Avatar>
                         <AvatarImage src={friend.avatar || "/avatar-placeholder.svg"} alt={friend.name} />
@@ -79,15 +105,15 @@ export default function SettleUpPage() {
                       <div>
                         <p className="font-medium">{friend.name}</p>
                         <p className="text-sm text-muted-foreground">
-                          {isPositive 
-                            ? `You owe ${friend.name}` 
-                            : `${friend.name} owes you`}
+                          {friendOwesUser
+                            ? `${friend.name} owes you`
+                            : `You owe ${friend.name}`}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <Badge variant={isPositive ? "destructive" : "default"}>
-                        {isPositive ? "-" : "+"}${Math.abs(balance).toFixed(2)}
+                      <Badge variant={friendOwesUser ? "default" : "destructive"}>
+                        {friendOwesUser ? "+" : "-"}${Math.abs(displayBalance).toFixed(2)}
                       </Badge>
                       <Button size="sm">Settle</Button>
                     </div>
@@ -96,7 +122,7 @@ export default function SettleUpPage() {
               })
             ) : (
               <div className="text-center py-8 text-muted-foreground">
-                No balances to settle up. You&apos;re all squared away!
+                No friends found. Add some friends to get started!
               </div>
             )}
           </div>

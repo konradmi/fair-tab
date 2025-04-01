@@ -70,24 +70,33 @@ export function DataExportImport() {
       try {
         const data = JSON.parse(e.target?.result as string)
         
+        // Get database instance
+        const database = await db.getDb()
+        
         // Clear existing data
         await Promise.all([
-          db.db.friends.clear(),
-          db.db.groups.clear(),
-          db.db.expenses.clear()
+          database.friends.clear(),
+          database.groups.clear(),
+          database.expenses.clear()
         ])
         
         // Import data from file
         if (data.friends && Array.isArray(data.friends)) {
-          await db.db.friends.bulkPut(data.friends as Friend[])
+          for (const friend of data.friends as Friend[]) {
+            await db.saveFriend(friend)
+          }
         }
         
         if (data.groups && Array.isArray(data.groups)) {
-          await db.db.groups.bulkPut(data.groups as Group[])
+          for (const group of data.groups as Group[]) {
+            await db.saveGroup(group)
+          }
         }
         
         if (data.expenses && Array.isArray(data.expenses)) {
-          await db.db.expenses.bulkPut(data.expenses as Expense[])
+          for (const expense of data.expenses as Expense[]) {
+            await db.saveExpense(expense)
+          }
         }
 
         toast.success("Data imported successfully", {

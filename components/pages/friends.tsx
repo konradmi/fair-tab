@@ -69,7 +69,7 @@ export default function FriendsPage() {
           <div className="space-y-4">
             {friends.length > 0 ? (
               friends.map((friend) => (
-                <div key={friend.id} className="flex items-center justify-between p-4 rounded-lg border">
+                <div key={friend.email} className="flex items-center justify-between p-4 rounded-lg border">
                   <div className="flex items-center gap-3">
                     <Avatar>
                       <AvatarImage src={friend.avatar || "/avatar-placeholder.svg"} alt={friend.name} />

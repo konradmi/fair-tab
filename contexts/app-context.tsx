@@ -8,6 +8,7 @@ import {
   type Expense,
   generateId,
 } from "@/lib/types"
+import { useAppAuth } from "@/hooks/useAppAuth"
 
 import * as db from "@/lib/indexed-db"
 
@@ -15,9 +16,9 @@ type AppContextType = {
   friends: Friend[]
   groups: Group[]
   expenses: Expense[]
-  addFriend: (friend: Omit<Friend, "id">) => Promise<Friend>
+  addFriend: (friend: Friend) => Promise<Friend>
   updateFriend: (friend: Friend) => Promise<Friend>
-  removeFriend: (friendId: string) => Promise<void>
+  removeFriend: (friendEmail: string) => Promise<void>
   addGroup: (group: Omit<Group, "id">) => Promise<Group>
   updateGroup: (group: Group) => Promise<Group>
   removeGroup: (groupId: string) => Promise<void>
@@ -31,33 +32,53 @@ type AppContextType = {
 
 const AppContext = createContext<AppContextType | undefined>(undefined)
 
-// Default current user - in a real app, this would come from an authentication system
-const defaultUser: Friend = {
-  id: "current-user",
-  name: "You",
-  email: "user@example.com",
-  avatar: "/avatar-placeholder.svg",
-}
-
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [friends, setFriends] = useState<Friend[]>([])
   const [groups, setGroups] = useState<Group[]>([])
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [currentUser] = useState<Friend>(defaultUser)
+  const { user, userEmail, isLoading: isAuthLoading } = useAppAuth()
+  
+  const [currentUser, setCurrentUser] = useState<Friend>({
+    name: "You",
+    email: "user@example.com",
+    avatar: "/avatar-placeholder.svg",
+  })
+  
+  useEffect(() => {
+    const updateCurrentUser = async () => {
+      if (!isAuthLoading && userEmail) {
+        const existingUser = await db.getFriendByEmail(userEmail)
+        
+        const updatedUser: Friend = existingUser || {
+          name: user?.firstName || (userEmail ? userEmail.split('@')[0] : "You"),
+          email: userEmail,
+          avatar: user?.imageUrl || "/avatar-placeholder.svg",
+        }
+        
+        setCurrentUser(updatedUser)
+        
+        if (!existingUser) {
+          await db.saveFriend(updatedUser)
+          setFriends(await db.getAllFriends())
+        }
+      }
+    }
+    
+    updateCurrentUser()
+  }, [user, userEmail, isAuthLoading])
 
-  // Initialize data
   useEffect(() => {
     const initializeData = async () => {
       try {
         if (typeof window === "undefined") return
+        
+        await db.getDb()
 
-        // Load data from IndexedDB
         const dbFriends = await db.getAllFriends()
         const dbGroups = await db.getAllGroups()
         const dbExpenses = await db.getAllExpenses()
 
-        // Set state with data from database
         setFriends(dbFriends)
         setGroups(dbGroups)
         setExpenses(dbExpenses)
@@ -71,12 +92,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     initializeData()
   }, [])
 
-  // Friend methods
-  const addFriend = async (friend: Omit<Friend, "id">) => {
-    const newFriend = { ...friend, id: generateId() } as Friend
-    const savedFriend = await db.saveFriend(newFriend)
-    setFriends(await db.getAllFriends())
-    return savedFriend
+  const addFriend = async (friend: Friend) => {
+    try {
+      const existingFriend = await db.getFriendByEmail(friend.email)
+      if (existingFriend) {
+        return existingFriend
+      }
+      
+      const savedFriend = await db.saveFriend(friend)
+      setFriends(await db.getAllFriends())
+      return savedFriend
+    } catch (error) {
+      console.error("Error adding friend:", error)
+      throw error
+    }
   }
 
   const updateFriend = async (friend: Friend) => {
@@ -85,14 +114,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return updatedFriend
   }
 
-  const removeFriend = async (friendId: string) => {
-    await db.deleteFriend(friendId)
+  const removeFriend = async (friendEmail: string) => {
+    await db.deleteFriend(friendEmail)
     setFriends(await db.getAllFriends())
   }
 
-  // Group methods
   const addGroup = async (group: Omit<Group, "id">) => {
-    const newGroup = { ...group, id: generateId() } as Group
+    const members = [...group.members]
+    if (currentUser.email && !members.includes(currentUser.email)) {
+      members.push(currentUser.email)
+    }
+    
+    const newGroup = { 
+      ...group, 
+      id: generateId(),
+      members
+    } as Group
+    
     const savedGroup = await db.saveGroup(newGroup)
     setGroups(await db.getAllGroups())
     return savedGroup
@@ -109,22 +147,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setGroups(await db.getAllGroups())
   }
 
-  // Expense methods
   const addExpense = async (expense: Omit<Expense, "id" | "date">) => {
+    const paidByEmail = expense.paidByEmail || currentUser.email;
+    
+    const splitAmong = expense.splitAmong.map(identifier => {
+      if (identifier.includes('@')) {
+        return identifier;
+      }
+      return currentUser.email;
+    });
+    
+    const uniqueSplitAmong = [...new Set(splitAmong)];
+    if (uniqueSplitAmong.length === 0) {
+      uniqueSplitAmong.push(currentUser.email);
+    }
+    
     const newExpense = {
       ...expense,
       id: generateId(),
       date: new Date().toISOString(),
-    }
-    const savedExpense = await db.saveExpense(newExpense)
-    setExpenses(await db.getAllExpenses())
-    return savedExpense
+      paidByEmail,
+      paidById: "",
+      splitAmong: uniqueSplitAmong,
+    };
+    
+    const savedExpense = await db.saveExpense(newExpense);
+    setExpenses(await db.getAllExpenses());
+    return savedExpense;
   }
 
   const updateExpense = async (expense: Expense) => {
-    const updatedExpense = await db.saveExpense(expense)
+    const updatedExpense = {
+      ...expense,
+      paidByEmail: expense.paidByEmail || currentUser.email
+    };
+    
+    const savedExpense = await db.saveExpense(updatedExpense)
     setExpenses(await db.getAllExpenses())
-    return updatedExpense
+    return savedExpense
   }
 
   const removeExpense = async (expenseId: string) => {
@@ -132,7 +192,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setExpenses(await db.getAllExpenses())
   }
 
-  // Balance calculations
   const getBalances = async () => {
     return db.calculateBalances()
   }
@@ -153,7 +212,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateExpense,
         removeExpense,
         getBalances,
-        isLoading,
+        isLoading: isLoading || isAuthLoading,
         currentUser,
       }}
     >
