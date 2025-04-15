@@ -146,64 +146,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     const savedGroup = await db.saveGroup(newGroup, userEmail)
     setGroups(await db.getAllGroups(userEmail))
-    
-    // Create bidirectional friend records for all members
-    for (const memberEmail of members) {
-      if (memberEmail === userEmail) continue
-      
-      // Create friend record for the member in the owner's database
-      let memberInOwnerDb = await db.getFriendByEmail(memberEmail, userEmail)
-      if (!memberInOwnerDb) {
-        memberInOwnerDb = {
-          name: memberEmail.split('@')[0],
-          email: memberEmail,
-          avatar: "/avatar-placeholder.svg",
-          ownerEmail: userEmail
-        }
-        await db.saveFriend(memberInOwnerDb, userEmail)
-      }
-      
-      // Create owner record in the member's database
-      let ownerInMemberDb = await db.getFriendByEmail(userEmail, memberEmail)
-      if (!ownerInMemberDb) {
-        ownerInMemberDb = {
-          name: currentUser.name,
-          email: userEmail,
-          avatar: currentUser.avatar,
-          ownerEmail: memberEmail
-        }
-        await db.saveFriend(ownerInMemberDb, memberEmail)
-      }
-      
-      // Create friend records between all other members
-      for (const otherMemberEmail of members) {
-        if (otherMemberEmail === memberEmail || otherMemberEmail === userEmail) continue
-        
-        let memberInOtherDb = await db.getFriendByEmail(memberEmail, otherMemberEmail)
-        if (!memberInOtherDb) {
-          memberInOtherDb = {
-            name: memberEmail.split('@')[0],
-            email: memberEmail,
-            avatar: "/avatar-placeholder.svg",
-            ownerEmail: otherMemberEmail
-          }
-          await db.saveFriend(memberInOtherDb, otherMemberEmail)
-        }
-        
-        let otherInMemberDb = await db.getFriendByEmail(otherMemberEmail, memberEmail)
-        if (!otherInMemberDb) {
-          otherInMemberDb = {
-            name: otherMemberEmail.split('@')[0],
-            email: otherMemberEmail,
-            avatar: "/avatar-placeholder.svg",
-            ownerEmail: memberEmail
-          }
-          await db.saveFriend(otherInMemberDb, memberEmail)
-        }
-      }
-    }
-    
-    setFriends(await db.getAllFriends(userEmail))
     return savedGroup
   }
 
@@ -212,64 +154,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     const updatedGroup = await db.saveGroup(group, userEmail)
     setGroups(await db.getAllGroups(userEmail))
-    
-    // Create bidirectional friend records for all members
-    for (const memberEmail of group.members) {
-      if (memberEmail === userEmail) continue
-      
-      // Create friend record for the member in the owner's database
-      let memberInOwnerDb = await db.getFriendByEmail(memberEmail, userEmail)
-      if (!memberInOwnerDb) {
-        memberInOwnerDb = {
-          name: memberEmail.split('@')[0],
-          email: memberEmail,
-          avatar: "/avatar-placeholder.svg",
-          ownerEmail: userEmail
-        }
-        await db.saveFriend(memberInOwnerDb, userEmail)
-      }
-      
-      // Create owner record in the member's database
-      let ownerInMemberDb = await db.getFriendByEmail(userEmail, memberEmail)
-      if (!ownerInMemberDb) {
-        ownerInMemberDb = {
-          name: currentUser.name,
-          email: userEmail,
-          avatar: currentUser.avatar,
-          ownerEmail: memberEmail
-        }
-        await db.saveFriend(ownerInMemberDb, memberEmail)
-      }
-      
-      // Create friend records between all other members
-      for (const otherMemberEmail of group.members) {
-        if (otherMemberEmail === memberEmail || otherMemberEmail === userEmail) continue
-        
-        let memberInOtherDb = await db.getFriendByEmail(memberEmail, otherMemberEmail)
-        if (!memberInOtherDb) {
-          memberInOtherDb = {
-            name: memberEmail.split('@')[0],
-            email: memberEmail,
-            avatar: "/avatar-placeholder.svg",
-            ownerEmail: otherMemberEmail
-          }
-          await db.saveFriend(memberInOtherDb, otherMemberEmail)
-        }
-        
-        let otherInMemberDb = await db.getFriendByEmail(otherMemberEmail, memberEmail)
-        if (!otherInMemberDb) {
-          otherInMemberDb = {
-            name: otherMemberEmail.split('@')[0],
-            email: otherMemberEmail,
-            avatar: "/avatar-placeholder.svg",
-            ownerEmail: memberEmail
-          }
-          await db.saveFriend(otherInMemberDb, memberEmail)
-        }
-      }
-    }
-    
-    setFriends(await db.getAllFriends(userEmail))
     return updatedGroup
   }
 
