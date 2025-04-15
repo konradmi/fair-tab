@@ -43,8 +43,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     name: "You",
     email: "user@example.com",
     avatar: "/avatar-placeholder.svg",
-    ownerEmail: "user@example.com",
-    accessibleTo: ["user@example.com"]
+    ownerEmail: "user@example.com"
   })
   
   useEffect(() => {
@@ -56,8 +55,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           name: user?.firstName || (userEmail ? userEmail.split('@')[0] : "You"),
           email: userEmail,
           avatar: user?.imageUrl || "/avatar-placeholder.svg",
-          ownerEmail: userEmail,
-          accessibleTo: [userEmail]
+          ownerEmail: userEmail
         }
         
         setCurrentUser(updatedUser)
@@ -101,7 +99,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     try {
       friend.ownerEmail = userEmail
-      friend.accessibleTo = [userEmail]
       
       const existingFriend = await db.getFriendByEmail(friend.email, userEmail)
       if (existingFriend) {
@@ -150,23 +147,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const savedGroup = await db.saveGroup(newGroup, userEmail)
     setGroups(await db.getAllGroups(userEmail))
     
+    // Create bidirectional friend records for all members
     for (const memberEmail of members) {
       if (memberEmail === userEmail) continue
       
-      let friend = await db.getFriendByEmail(memberEmail, userEmail)
-      
-      if (!friend) {
-        friend = {
+      // Create friend record for the member in the owner's database
+      let memberInOwnerDb = await db.getFriendByEmail(memberEmail, userEmail)
+      if (!memberInOwnerDb) {
+        memberInOwnerDb = {
           name: memberEmail.split('@')[0],
           email: memberEmail,
           avatar: "/avatar-placeholder.svg",
-          ownerEmail: userEmail,
-          accessibleTo: [userEmail]
+          ownerEmail: userEmail
         }
-        await db.saveFriend(friend, userEmail)
-      } else if (!friend.accessibleTo.includes(userEmail)) {
-        friend.accessibleTo.push(userEmail)
-        await db.saveFriend(friend, userEmail)
+        await db.saveFriend(memberInOwnerDb, userEmail)
+      }
+      
+      // Create owner record in the member's database
+      let ownerInMemberDb = await db.getFriendByEmail(userEmail, memberEmail)
+      if (!ownerInMemberDb) {
+        ownerInMemberDb = {
+          name: currentUser.name,
+          email: userEmail,
+          avatar: currentUser.avatar,
+          ownerEmail: memberEmail
+        }
+        await db.saveFriend(ownerInMemberDb, memberEmail)
+      }
+      
+      // Create friend records between all other members
+      for (const otherMemberEmail of members) {
+        if (otherMemberEmail === memberEmail || otherMemberEmail === userEmail) continue
+        
+        let memberInOtherDb = await db.getFriendByEmail(memberEmail, otherMemberEmail)
+        if (!memberInOtherDb) {
+          memberInOtherDb = {
+            name: memberEmail.split('@')[0],
+            email: memberEmail,
+            avatar: "/avatar-placeholder.svg",
+            ownerEmail: otherMemberEmail
+          }
+          await db.saveFriend(memberInOtherDb, otherMemberEmail)
+        }
+        
+        let otherInMemberDb = await db.getFriendByEmail(otherMemberEmail, memberEmail)
+        if (!otherInMemberDb) {
+          otherInMemberDb = {
+            name: otherMemberEmail.split('@')[0],
+            email: otherMemberEmail,
+            avatar: "/avatar-placeholder.svg",
+            ownerEmail: memberEmail
+          }
+          await db.saveFriend(otherInMemberDb, memberEmail)
+        }
       }
     }
     
@@ -180,23 +213,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updatedGroup = await db.saveGroup(group, userEmail)
     setGroups(await db.getAllGroups(userEmail))
     
+    // Create bidirectional friend records for all members
     for (const memberEmail of group.members) {
       if (memberEmail === userEmail) continue
       
-      let friend = await db.getFriendByEmail(memberEmail, userEmail)
-      
-      if (!friend) {
-        friend = {
+      // Create friend record for the member in the owner's database
+      let memberInOwnerDb = await db.getFriendByEmail(memberEmail, userEmail)
+      if (!memberInOwnerDb) {
+        memberInOwnerDb = {
           name: memberEmail.split('@')[0],
           email: memberEmail,
           avatar: "/avatar-placeholder.svg",
-          ownerEmail: userEmail,
-          accessibleTo: [userEmail]
+          ownerEmail: userEmail
         }
-        await db.saveFriend(friend, userEmail)
-      } else if (!friend.accessibleTo.includes(userEmail)) {
-        friend.accessibleTo.push(userEmail)
-        await db.saveFriend(friend, userEmail)
+        await db.saveFriend(memberInOwnerDb, userEmail)
+      }
+      
+      // Create owner record in the member's database
+      let ownerInMemberDb = await db.getFriendByEmail(userEmail, memberEmail)
+      if (!ownerInMemberDb) {
+        ownerInMemberDb = {
+          name: currentUser.name,
+          email: userEmail,
+          avatar: currentUser.avatar,
+          ownerEmail: memberEmail
+        }
+        await db.saveFriend(ownerInMemberDb, memberEmail)
+      }
+      
+      // Create friend records between all other members
+      for (const otherMemberEmail of group.members) {
+        if (otherMemberEmail === memberEmail || otherMemberEmail === userEmail) continue
+        
+        let memberInOtherDb = await db.getFriendByEmail(memberEmail, otherMemberEmail)
+        if (!memberInOtherDb) {
+          memberInOtherDb = {
+            name: memberEmail.split('@')[0],
+            email: memberEmail,
+            avatar: "/avatar-placeholder.svg",
+            ownerEmail: otherMemberEmail
+          }
+          await db.saveFriend(memberInOtherDb, otherMemberEmail)
+        }
+        
+        let otherInMemberDb = await db.getFriendByEmail(otherMemberEmail, memberEmail)
+        if (!otherInMemberDb) {
+          otherInMemberDb = {
+            name: otherMemberEmail.split('@')[0],
+            email: otherMemberEmail,
+            avatar: "/avatar-placeholder.svg",
+            ownerEmail: memberEmail
+          }
+          await db.saveFriend(otherInMemberDb, memberEmail)
+        }
       }
     }
     
@@ -214,42 +283,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addExpense = async (expense: Omit<Expense, "id" | "date" | "ownerEmail">) => {
     if (!userEmail) throw new Error("User not authenticated")
     
-    const paidByEmail = expense.paidByEmail || userEmail;
+    const paidByEmail = expense.paidByEmail || userEmail
+    const paidByFriend = friends.find(f => f.email === paidByEmail) || currentUser
     
     const splitAmong = expense.splitAmong.map(identifier => {
       if (identifier.includes('@')) {
-        return identifier;
+        return identifier
       }
-      return userEmail;
-    });
+      return userEmail
+    })
     
-    const uniqueSplitAmong = [...new Set(splitAmong)];
+    const uniqueSplitAmong = [...new Set([...splitAmong, paidByEmail])]
     if (uniqueSplitAmong.length === 0) {
-      uniqueSplitAmong.push(userEmail);
+      uniqueSplitAmong.push(userEmail)
     }
     
     const newExpense = {
       ...expense,
       id: generateId(),
       date: new Date().toISOString(),
-      paidByEmail,
+      paidByEmail: paidByFriend.email,
       paidById: "",
       splitAmong: uniqueSplitAmong,
       ownerEmail: userEmail
-    };
+    }
     
-    const savedExpense = await db.saveExpense(newExpense, userEmail);
-    setExpenses(await db.getAllExpenses(userEmail));
-    return savedExpense;
+    const savedExpense = await db.saveExpense(newExpense, userEmail)
+    setExpenses(await db.getAllExpenses(userEmail))
+    return savedExpense
   }
 
   const updateExpense = async (expense: Expense) => {
     if (!userEmail) throw new Error("User not authenticated")
     
+    const paidByEmail = expense.paidByEmail || userEmail
+    const paidByFriend = friends.find(f => f.email === paidByEmail) || currentUser
+    
     const updatedExpense = {
       ...expense,
-      paidByEmail: expense.paidByEmail || userEmail
-    };
+      paidByEmail: paidByFriend.email,
+      paidById: "",
+      splitAmong: [...new Set([...expense.splitAmong, paidByFriend.email])]
+    }
     
     const savedExpense = await db.saveExpense(updatedExpense, userEmail)
     setExpenses(await db.getAllExpenses(userEmail))

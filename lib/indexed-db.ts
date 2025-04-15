@@ -15,7 +15,7 @@ class FairTabDatabase extends Dexie {
     super(DB_NAME);
     
     this.version(DB_VERSION).stores({
-      friends: 'email, name, ownerEmail, *accessibleTo',
+      friends: 'email, name, ownerEmail',
       groups: 'id, name, ownerEmail, *members',
       expenses: 'id, groupId, paidByEmail, date, ownerEmail'
     });
@@ -55,27 +55,53 @@ export const getDb = async (): Promise<FairTabDatabase> => {
   return db;
 };
 
-export const getAllFriends = async (userEmail: string): Promise<Friend[]> => {
-  try {
-    const database = await getDb();
-    // Get friends owned by the user or accessible to the user
-    return await database.friends.where('ownerEmail').equals(userEmail)
-      .or('accessibleTo').equals(userEmail)
-      .toArray();
-  } catch (error) {
-    console.error('Error getting friends:', error);
-    return [];
-  }
-};
+export async function getAllFriends(userEmail: string): Promise<Friend[]> {
+  const db = await getDb()
+  const friends = await db.friends.toArray()
+  const groups = await db.groups.toArray()
+  
+  // Get friends where current user is the owner
+  const ownedFriends = friends.filter((friend: Friend) => friend.ownerEmail === userEmail)
+  
+  // Get all groups where the current user is a member
+  const userGroups = groups.filter((group: Group) => group.members.includes(userEmail))
+  
+  // Get all unique member emails from these groups
+  const groupMemberEmails = [...new Set(userGroups.flatMap((group: Group) => group.members))]
+  
+  // Get all friends that are members of these groups
+  const groupFriends = friends.filter((friend: Friend) => 
+    friend.ownerEmail !== userEmail && // Don't include friends we own
+    groupMemberEmails.includes(friend.email) // Include if they're in any of our groups
+  )
+  
+  // Combine and deduplicate friends based on email
+  const allFriends = [...ownedFriends, ...groupFriends]
+  const uniqueFriends = Array.from(
+    new Map(allFriends.map(friend => [friend.email, friend])).values()
+  )
+  
+  return uniqueFriends
+}
 
 export const getFriendByEmail = async (email: string, userEmail: string): Promise<Friend | undefined> => {
   try {
     const database = await getDb();
     const friend = await database.friends.get(email);
     
-    // Check if the friend is owned by the user or accessible to the user
-    if (friend && (friend.ownerEmail === userEmail || friend.accessibleTo?.includes(userEmail))) {
-      return friend;
+    // Check if the friend is owned by the user or is in any of user's groups
+    if (friend) {
+      if (friend.ownerEmail === userEmail) {
+        return friend;
+      }
+      
+      // Check if the friend is in any of the user's groups
+      const userGroups = await getAllGroups(userEmail);
+      const isInUserGroups = userGroups.some(group => group.members.includes(friend.email));
+      
+      if (isInUserGroups) {
+        return friend;
+      }
     }
     return undefined;
   } catch (error) {
@@ -91,16 +117,6 @@ export const saveFriend = async (friend: Friend, userEmail: string): Promise<Fri
     // Set the owner email if not already set
     if (!friend.ownerEmail) {
       friend.ownerEmail = userEmail;
-    }
-    
-    // Initialize accessibleTo array if not present
-    if (!friend.accessibleTo) {
-      friend.accessibleTo = [];
-    }
-    
-    // Make sure owner always has access
-    if (!friend.accessibleTo.includes(friend.ownerEmail)) {
-      friend.accessibleTo.push(friend.ownerEmail);
     }
     
     const existingFriend = await database.friends.get(friend.email);

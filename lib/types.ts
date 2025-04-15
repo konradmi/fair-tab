@@ -12,9 +12,8 @@ export type Group = {
 export type Friend = {
   name: string
   email: string
-  avatar?: string
+  avatar: string
   ownerEmail: string
-  accessibleTo: string[]
 }
 
 export type Expense = {

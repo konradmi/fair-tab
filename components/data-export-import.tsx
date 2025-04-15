@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -23,6 +23,19 @@ export function DataExportImport() {
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const { userEmail } = useAppAuth()
+  const [friends, setFriends] = useState<Friend[]>([])
+  const [groups, setGroups] = useState<Group[]>([])
+  const [expenses, setExpenses] = useState<Expense[]>([])
+  
+  useEffect(() => {
+    const loadData = async () => {
+      if (!userEmail) return
+      setFriends(await db.getAllFriends(userEmail))
+      setGroups(await db.getAllGroups(userEmail))
+      setExpenses(await db.getAllExpenses(userEmail))
+    }
+    loadData()
+  }, [userEmail])
 
   const handleExport = async () => {
     if (!userEmail) {
@@ -32,17 +45,13 @@ export function DataExportImport() {
     
     setIsLoading(true)
     try {
-      const groups = await db.getAllGroups(userEmail)
-      const friends = await db.getAllFriends(userEmail)
-      const expenses = await db.getAllExpenses(userEmail)
-
       const data = {
+        friends,
         groups,
-        friends, 
         expenses
       }
 
-      const blob = new Blob([JSON.stringify(data)], { type: "application/json" })
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
@@ -65,88 +74,53 @@ export function DataExportImport() {
     }
   }
 
-  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file || !userEmail) return
-
-    setIsLoading(true)
-    const reader = new FileReader()
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!event.target.files?.length || !userEmail) return
     
-    reader.onload = async (e) => {
-      try {
-        const data = JSON.parse(e.target?.result as string)
-        
-        const database = await db.getDb()
-        
-        const existingGroups = await db.getAllGroups(userEmail)
-        const existingFriends = await db.getAllFriends(userEmail)
-        const existingExpenses = await db.getAllExpenses(userEmail)
-        
-        for (const group of existingGroups) {
-          if (group.ownerEmail === userEmail) {
-            await database.groups.delete(group.id)
-          }
+    try {
+      const file = event.target.files[0]
+      const text = await file.text()
+      const data = JSON.parse(text)
+      
+      // Import friends
+      if (data.friends?.length) {
+        for (const friend of data.friends) {
+          friend.ownerEmail = userEmail
+          await db.saveFriend(friend, userEmail)
         }
-        
-        for (const friend of existingFriends) {
-          if (friend.ownerEmail === userEmail) {
-            await database.friends.delete(friend.email)
-          }
-        }
-        
-        for (const expense of existingExpenses) {
-          if (expense.ownerEmail === userEmail) {
-            await database.expenses.delete(expense.id)
-          }
-        }
-        
-        if (data.friends && Array.isArray(data.friends)) {
-          for (const friend of data.friends as Friend[]) {
-            friend.ownerEmail = userEmail
-            if (!friend.accessibleTo) friend.accessibleTo = []
-            if (!friend.accessibleTo.includes(userEmail)) {
-              friend.accessibleTo.push(userEmail)
-            }
-            await db.saveFriend(friend, userEmail)
-          }
-        }
-        
-        if (data.groups && Array.isArray(data.groups)) {
-          for (const group of data.groups as Group[]) {
-            group.ownerEmail = userEmail
-            if (!group.members.includes(userEmail)) {
-              group.members.push(userEmail)
-            }
-            await db.saveGroup(group, userEmail)
-          }
-        }
-        
-        if (data.expenses && Array.isArray(data.expenses)) {
-          for (const expense of data.expenses as Expense[]) {
-            expense.ownerEmail = userEmail
-            await db.saveExpense(expense, userEmail)
-          }
-        }
-
-        toast.success("Data imported successfully", {
-          description: "Your data has been imported. Please refresh the page.",
-        })
-
-        setTimeout(() => {
-          window.location.reload()
-        }, 1500)
-      } catch (error) {
-        console.error("Import error:", error)
-        toast.error("Import failed", {
-          description: "There was an error importing your data. Please check the file format.",
-        })
-      } finally {
-        setIsLoading(false)
       }
+      
+      // Import groups
+      if (data.groups?.length) {
+        for (const group of data.groups) {
+          group.ownerEmail = userEmail
+          if (!group.members.includes(userEmail)) {
+            group.members.push(userEmail)
+          }
+          await db.saveGroup(group, userEmail)
+        }
+      }
+      
+      // Import expenses
+      if (data.expenses?.length) {
+        for (const expense of data.expenses) {
+          expense.ownerEmail = userEmail
+          await db.saveExpense(expense, userEmail)
+        }
+      }
+      
+      // Refresh data
+      setFriends(await db.getAllFriends(userEmail))
+      setGroups(await db.getAllGroups(userEmail))
+      setExpenses(await db.getAllExpenses(userEmail))
+      
+      toast.success('Data imported successfully')
+    } catch (error) {
+      console.error('Error importing data:', error)
+      toast.error('Error importing data')
     }
-
-    reader.readAsText(file)
-    setImportDialogOpen(false)
+    
+    event.target.value = ''
   }
 
   return (
