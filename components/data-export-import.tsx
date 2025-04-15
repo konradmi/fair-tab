@@ -17,18 +17,24 @@ import { toast } from "sonner"
 import { Download, Upload } from "lucide-react"
 import * as db from "@/lib/indexed-db"
 import { type Expense, type Friend, type Group } from "@/lib/types"
+import { useAppAuth } from "@/hooks/useAppAuth"
 
 export function DataExportImport() {
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const { userEmail } = useAppAuth()
 
   const handleExport = async () => {
+    if (!userEmail) {
+      toast.error("You must be logged in to export data")
+      return
+    }
+    
     setIsLoading(true)
     try {
-      // Fetch all data from IndexedDB
-      const groups = await db.getAllGroups()
-      const friends = await db.getAllFriends()
-      const expenses = await db.getAllExpenses()
+      const groups = await db.getAllGroups(userEmail)
+      const friends = await db.getAllFriends(userEmail)
+      const expenses = await db.getAllExpenses(userEmail)
 
       const data = {
         groups,
@@ -61,7 +67,7 @@ export function DataExportImport() {
 
   const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (!file) return
+    if (!file || !userEmail) return
 
     setIsLoading(true)
     const reader = new FileReader()
@@ -70,32 +76,55 @@ export function DataExportImport() {
       try {
         const data = JSON.parse(e.target?.result as string)
         
-        // Get database instance
         const database = await db.getDb()
         
-        // Clear existing data
-        await Promise.all([
-          database.friends.clear(),
-          database.groups.clear(),
-          database.expenses.clear()
-        ])
+        const existingGroups = await db.getAllGroups(userEmail)
+        const existingFriends = await db.getAllFriends(userEmail)
+        const existingExpenses = await db.getAllExpenses(userEmail)
         
-        // Import data from file
+        for (const group of existingGroups) {
+          if (group.ownerEmail === userEmail) {
+            await database.groups.delete(group.id)
+          }
+        }
+        
+        for (const friend of existingFriends) {
+          if (friend.ownerEmail === userEmail) {
+            await database.friends.delete(friend.email)
+          }
+        }
+        
+        for (const expense of existingExpenses) {
+          if (expense.ownerEmail === userEmail) {
+            await database.expenses.delete(expense.id)
+          }
+        }
+        
         if (data.friends && Array.isArray(data.friends)) {
           for (const friend of data.friends as Friend[]) {
-            await db.saveFriend(friend)
+            friend.ownerEmail = userEmail
+            if (!friend.accessibleTo) friend.accessibleTo = []
+            if (!friend.accessibleTo.includes(userEmail)) {
+              friend.accessibleTo.push(userEmail)
+            }
+            await db.saveFriend(friend, userEmail)
           }
         }
         
         if (data.groups && Array.isArray(data.groups)) {
           for (const group of data.groups as Group[]) {
-            await db.saveGroup(group)
+            group.ownerEmail = userEmail
+            if (!group.members.includes(userEmail)) {
+              group.members.push(userEmail)
+            }
+            await db.saveGroup(group, userEmail)
           }
         }
         
         if (data.expenses && Array.isArray(data.expenses)) {
           for (const expense of data.expenses as Expense[]) {
-            await db.saveExpense(expense)
+            expense.ownerEmail = userEmail
+            await db.saveExpense(expense, userEmail)
           }
         }
 
@@ -103,7 +132,6 @@ export function DataExportImport() {
           description: "Your data has been imported. Please refresh the page.",
         })
 
-        // Refresh the page to load the new data
         setTimeout(() => {
           window.location.reload()
         }, 1500)
@@ -127,7 +155,7 @@ export function DataExportImport() {
         variant="outline" 
         size="sm" 
         onClick={handleExport} 
-        disabled={isLoading}
+        disabled={isLoading || !userEmail}
       >
         <Download className="mr-2 h-4 w-4" />
         {isLoading ? "Exporting..." : "Export Data"}
@@ -138,7 +166,7 @@ export function DataExportImport() {
           <Button 
             variant="outline" 
             size="sm"
-            disabled={isLoading}
+            disabled={isLoading || !userEmail}
           >
             <Upload className="mr-2 h-4 w-4" />
             {isLoading ? "Importing..." : "Import Data"}

@@ -15,9 +15,9 @@ class FairTabDatabase extends Dexie {
     super(DB_NAME);
     
     this.version(DB_VERSION).stores({
-      friends: 'email, name',
-      groups: 'id, name',
-      expenses: 'id, groupId, paidByEmail, date'
+      friends: 'email, name, ownerEmail, *accessibleTo',
+      groups: 'id, name, ownerEmail, *members',
+      expenses: 'id, groupId, paidByEmail, date, ownerEmail'
     });
   }
 }
@@ -55,29 +55,53 @@ export const getDb = async (): Promise<FairTabDatabase> => {
   return db;
 };
 
-export const getAllFriends = async (): Promise<Friend[]> => {
+export const getAllFriends = async (userEmail: string): Promise<Friend[]> => {
   try {
     const database = await getDb();
-    return await database.friends.toArray();
+    // Get friends owned by the user or accessible to the user
+    return await database.friends.where('ownerEmail').equals(userEmail)
+      .or('accessibleTo').equals(userEmail)
+      .toArray();
   } catch (error) {
     console.error('Error getting friends:', error);
     return [];
   }
 };
 
-export const getFriendByEmail = async (email: string): Promise<Friend | undefined> => {
+export const getFriendByEmail = async (email: string, userEmail: string): Promise<Friend | undefined> => {
   try {
     const database = await getDb();
-    return await database.friends.get(email);
+    const friend = await database.friends.get(email);
+    
+    // Check if the friend is owned by the user or accessible to the user
+    if (friend && (friend.ownerEmail === userEmail || friend.accessibleTo?.includes(userEmail))) {
+      return friend;
+    }
+    return undefined;
   } catch (error) {
     console.error(`Error getting friend with email ${email}:`, error);
     return undefined;
   }
 };
 
-export const saveFriend = async (friend: Friend): Promise<Friend> => {
+export const saveFriend = async (friend: Friend, userEmail: string): Promise<Friend> => {
   try {
     const database = await getDb();
+    
+    // Set the owner email if not already set
+    if (!friend.ownerEmail) {
+      friend.ownerEmail = userEmail;
+    }
+    
+    // Initialize accessibleTo array if not present
+    if (!friend.accessibleTo) {
+      friend.accessibleTo = [];
+    }
+    
+    // Make sure owner always has access
+    if (!friend.accessibleTo.includes(friend.ownerEmail)) {
+      friend.accessibleTo.push(friend.ownerEmail);
+    }
     
     const existingFriend = await database.friends.get(friend.email);
     
@@ -100,39 +124,64 @@ export const saveFriend = async (friend: Friend): Promise<Friend> => {
   }
 };
 
-export const deleteFriend = async (email: string): Promise<void> => {
+export const deleteFriend = async (email: string, userEmail: string): Promise<void> => {
   try {
     const database = await getDb();
-    await database.friends.delete(email);
+    const friend = await database.friends.get(email);
+    
+    // Only allow deletion if user is the owner
+    if (friend && friend.ownerEmail === userEmail) {
+      await database.friends.delete(email);
+    } else {
+      throw new Error('Not authorized to delete this friend');
+    }
   } catch (error) {
     console.error(`Error deleting friend with email ${email}:`, error);
     throw error;
   }
 };
 
-export const getAllGroups = async (): Promise<Group[]> => {
+export const getAllGroups = async (userEmail: string): Promise<Group[]> => {
   try {
     const database = await getDb();
-    return await database.groups.toArray();
+    // Get groups owned by the user or where user is a member
+    return await database.groups.where('ownerEmail').equals(userEmail)
+      .or('members').equals(userEmail)
+      .toArray();
   } catch (error) {
     console.error('Error getting groups:', error);
     return [];
   }
 };
 
-export const getGroupById = async (id: string): Promise<Group | undefined> => {
+export const getGroupById = async (id: string, userEmail: string): Promise<Group | undefined> => {
   try {
     const database = await getDb();
-    return await database.groups.get(id);
+    const group = await database.groups.get(id);
+    
+    // Check if the user is the owner or a member of the group
+    if (group && (group.ownerEmail === userEmail || group.members.includes(userEmail))) {
+      return group;
+    }
+    return undefined;
   } catch (error) {
     console.error(`Error getting group with id ${id}:`, error);
     return undefined;
   }
 };
 
-export const saveGroup = async (group: Group): Promise<Group> => {
+export const saveGroup = async (group: Group, userEmail: string): Promise<Group> => {
   try {
     const database = await getDb();
+    
+    if (!group.ownerEmail) {
+      group.ownerEmail = userEmail;
+    }
+    
+    if (!group.members.includes(group.ownerEmail)) {
+      group.members.push(group.ownerEmail);
+    }
+    
     await database.groups.put(group);
     return group;
   } catch (error) {
@@ -141,39 +190,70 @@ export const saveGroup = async (group: Group): Promise<Group> => {
   }
 };
 
-export const deleteGroup = async (id: string): Promise<void> => {
+export const deleteGroup = async (id: string, userEmail: string): Promise<void> => {
   try {
     const database = await getDb();
-    await database.groups.delete(id);
+    const group = await database.groups.get(id);
+    
+    if (group && group.ownerEmail === userEmail) {
+      await database.groups.delete(id);
+    } else {
+      throw new Error('Not authorized to delete this group');
+    }
   } catch (error) {
     console.error(`Error deleting group with id ${id}:`, error);
     throw error;
   }
 };
 
-export const getAllExpenses = async (): Promise<Expense[]> => {
+export const getAllExpenses = async (userEmail: string): Promise<Expense[]> => {
   try {
     const database = await getDb();
-    return await database.expenses.toArray();
+    
+    const userGroups = await getAllGroups(userEmail);
+    const groupIds = userGroups.map(group => group.id);
+    
+    return await database.expenses
+      .where('groupId')
+      .anyOf(groupIds)
+      .toArray();
   } catch (error) {
     console.error('Error getting expenses:', error);
     return [];
   }
 };
 
-export const getExpenseById = async (id: string): Promise<Expense | undefined> => {
+export const getExpenseById = async (id: string, userEmail: string): Promise<Expense | undefined> => {
   try {
     const database = await getDb();
-    return await database.expenses.get(id);
+    const expense = await database.expenses.get(id);
+    
+    if (expense) {
+      const group = await getGroupById(expense.groupId, userEmail);
+      if (group) {
+        return expense;
+      }
+    }
+    return undefined;
   } catch (error) {
     console.error(`Error getting expense with id ${id}:`, error);
     return undefined;
   }
 };
 
-export const saveExpense = async (expense: Expense): Promise<Expense> => {
+export const saveExpense = async (expense: Expense, userEmail: string): Promise<Expense> => {
   try {
     const database = await getDb();
+    
+    if (!expense.ownerEmail) {
+      expense.ownerEmail = userEmail;
+    }
+    
+    const group = await getGroupById(expense.groupId, userEmail);
+    if (!group) {
+      throw new Error('Not authorized to add expense to this group');
+    }
+    
     await database.expenses.put(expense);
     return expense;
   } catch (error) {
@@ -182,18 +262,36 @@ export const saveExpense = async (expense: Expense): Promise<Expense> => {
   }
 };
 
-export const deleteExpense = async (id: string): Promise<void> => {
+export const deleteExpense = async (id: string, userEmail: string): Promise<void> => {
   try {
     const database = await getDb();
-    await database.expenses.delete(id);
+    const expense = await database.expenses.get(id);
+    
+    if (expense) {
+      if (expense.ownerEmail === userEmail) {
+        await database.expenses.delete(id);
+      } else {
+        const group = await getGroupById(expense.groupId, userEmail);
+        if (group && group.ownerEmail === userEmail) {
+          await database.expenses.delete(id);
+        } else {
+          throw new Error('Not authorized to delete this expense');
+        }
+      }
+    }
   } catch (error) {
     console.error(`Error deleting expense with id ${id}:`, error);
     throw error;
   }
 };
 
-export const getExpensesByGroupId = async (groupId: string): Promise<Expense[]> => {
+export const getExpensesByGroupId = async (groupId: string, userEmail: string): Promise<Expense[]> => {
   try {
+    const group = await getGroupById(groupId, userEmail);
+    if (!group) {
+      return [];
+    }
+    
     const database = await getDb();
     return await database.expenses.where('groupId').equals(groupId).toArray();
   } catch (error) {
@@ -202,10 +300,10 @@ export const getExpensesByGroupId = async (groupId: string): Promise<Expense[]> 
   }
 };
 
-export const calculateBalances = async (): Promise<Record<string, Record<string, number>>> => {
+export const calculateBalances = async (userEmail: string): Promise<Record<string, Record<string, number>>> => {
   try {
-    const expenses = await getAllExpenses();
-    const friends = await getAllFriends();
+    const expenses = await getAllExpenses(userEmail);
+    const friends = await getAllFriends(userEmail);
     const balances: Record<string, Record<string, number>> = {};
 
     friends.forEach((friend) => {

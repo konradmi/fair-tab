@@ -19,10 +19,10 @@ type AppContextType = {
   addFriend: (friend: Friend) => Promise<Friend>
   updateFriend: (friend: Friend) => Promise<Friend>
   removeFriend: (friendEmail: string) => Promise<void>
-  addGroup: (group: Omit<Group, "id">) => Promise<Group>
+  addGroup: (group: Omit<Group, "id" | "ownerEmail">) => Promise<Group>
   updateGroup: (group: Group) => Promise<Group>
   removeGroup: (groupId: string) => Promise<void>
-  addExpense: (expense: Omit<Expense, "id" | "date">) => Promise<Expense>
+  addExpense: (expense: Omit<Expense, "id" | "date" | "ownerEmail">) => Promise<Expense>
   updateExpense: (expense: Expense) => Promise<Expense>
   removeExpense: (expenseId: string) => Promise<void>
   getBalances: () => Promise<Record<string, Record<string, number>>>
@@ -43,24 +43,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     name: "You",
     email: "user@example.com",
     avatar: "/avatar-placeholder.svg",
+    ownerEmail: "user@example.com",
+    accessibleTo: ["user@example.com"]
   })
   
   useEffect(() => {
     const updateCurrentUser = async () => {
       if (!isAuthLoading && userEmail) {
-        const existingUser = await db.getFriendByEmail(userEmail)
+        const existingUser = await db.getFriendByEmail(userEmail, userEmail)
         
         const updatedUser: Friend = existingUser || {
           name: user?.firstName || (userEmail ? userEmail.split('@')[0] : "You"),
           email: userEmail,
           avatar: user?.imageUrl || "/avatar-placeholder.svg",
+          ownerEmail: userEmail,
+          accessibleTo: [userEmail]
         }
         
         setCurrentUser(updatedUser)
         
         if (!existingUser) {
-          await db.saveFriend(updatedUser)
-          setFriends(await db.getAllFriends())
+          await db.saveFriend(updatedUser, userEmail)
+          setFriends(await db.getAllFriends(userEmail))
         }
       }
     }
@@ -71,13 +75,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     const initializeData = async () => {
       try {
-        if (typeof window === "undefined") return
+        if (typeof window === "undefined" || !userEmail) return
         
         await db.getDb()
 
-        const dbFriends = await db.getAllFriends()
-        const dbGroups = await db.getAllGroups()
-        const dbExpenses = await db.getAllExpenses()
+        const dbFriends = await db.getAllFriends(userEmail)
+        const dbGroups = await db.getAllGroups(userEmail)
+        const dbExpenses = await db.getAllExpenses(userEmail)
 
         setFriends(dbFriends)
         setGroups(dbGroups)
@@ -90,17 +94,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     initializeData()
-  }, [])
+  }, [userEmail])
 
   const addFriend = async (friend: Friend) => {
+    if (!userEmail) throw new Error("User not authenticated")
+    
     try {
-      const existingFriend = await db.getFriendByEmail(friend.email)
+      friend.ownerEmail = userEmail
+      friend.accessibleTo = [userEmail]
+      
+      const existingFriend = await db.getFriendByEmail(friend.email, userEmail)
       if (existingFriend) {
         return existingFriend
       }
       
-      const savedFriend = await db.saveFriend(friend)
-      setFriends(await db.getAllFriends())
+      const savedFriend = await db.saveFriend(friend, userEmail)
+      setFriends(await db.getAllFriends(userEmail))
       return savedFriend
     } catch (error) {
       console.error("Error adding friend:", error)
@@ -109,57 +118,114 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }
 
   const updateFriend = async (friend: Friend) => {
-    const updatedFriend = await db.saveFriend(friend)
-    setFriends(await db.getAllFriends())
+    if (!userEmail) throw new Error("User not authenticated")
+    
+    const updatedFriend = await db.saveFriend(friend, userEmail)
+    setFriends(await db.getAllFriends(userEmail))
     return updatedFriend
   }
 
   const removeFriend = async (friendEmail: string) => {
-    await db.deleteFriend(friendEmail)
-    setFriends(await db.getAllFriends())
+    if (!userEmail) throw new Error("User not authenticated")
+    
+    await db.deleteFriend(friendEmail, userEmail)
+    setFriends(await db.getAllFriends(userEmail))
   }
 
-  const addGroup = async (group: Omit<Group, "id">) => {
+  const addGroup = async (group: Omit<Group, "id" | "ownerEmail">) => {
+    if (!userEmail) throw new Error("User not authenticated")
+    
     const members = [...group.members]
-    if (currentUser.email && !members.includes(currentUser.email)) {
-      members.push(currentUser.email)
+    if (userEmail && !members.includes(userEmail)) {
+      members.push(userEmail)
     }
     
     const newGroup = { 
       ...group, 
       id: generateId(),
-      members
+      members,
+      ownerEmail: userEmail
     } as Group
     
-    const savedGroup = await db.saveGroup(newGroup)
-    setGroups(await db.getAllGroups())
+    const savedGroup = await db.saveGroup(newGroup, userEmail)
+    setGroups(await db.getAllGroups(userEmail))
+    
+    for (const memberEmail of members) {
+      if (memberEmail === userEmail) continue
+      
+      let friend = await db.getFriendByEmail(memberEmail, userEmail)
+      
+      if (!friend) {
+        friend = {
+          name: memberEmail.split('@')[0],
+          email: memberEmail,
+          avatar: "/avatar-placeholder.svg",
+          ownerEmail: userEmail,
+          accessibleTo: [userEmail]
+        }
+        await db.saveFriend(friend, userEmail)
+      } else if (!friend.accessibleTo.includes(userEmail)) {
+        friend.accessibleTo.push(userEmail)
+        await db.saveFriend(friend, userEmail)
+      }
+    }
+    
+    setFriends(await db.getAllFriends(userEmail))
     return savedGroup
   }
 
   const updateGroup = async (group: Group) => {
-    const updatedGroup = await db.saveGroup(group)
-    setGroups(await db.getAllGroups())
+    if (!userEmail) throw new Error("User not authenticated")
+    
+    const updatedGroup = await db.saveGroup(group, userEmail)
+    setGroups(await db.getAllGroups(userEmail))
+    
+    for (const memberEmail of group.members) {
+      if (memberEmail === userEmail) continue
+      
+      let friend = await db.getFriendByEmail(memberEmail, userEmail)
+      
+      if (!friend) {
+        friend = {
+          name: memberEmail.split('@')[0],
+          email: memberEmail,
+          avatar: "/avatar-placeholder.svg",
+          ownerEmail: userEmail,
+          accessibleTo: [userEmail]
+        }
+        await db.saveFriend(friend, userEmail)
+      } else if (!friend.accessibleTo.includes(userEmail)) {
+        friend.accessibleTo.push(userEmail)
+        await db.saveFriend(friend, userEmail)
+      }
+    }
+    
+    setFriends(await db.getAllFriends(userEmail))
     return updatedGroup
   }
 
   const removeGroup = async (groupId: string) => {
-    await db.deleteGroup(groupId)
-    setGroups(await db.getAllGroups())
+    if (!userEmail) throw new Error("User not authenticated")
+    
+    await db.deleteGroup(groupId, userEmail)
+    setGroups(await db.getAllGroups(userEmail))
   }
 
-  const addExpense = async (expense: Omit<Expense, "id" | "date">) => {
-    const paidByEmail = expense.paidByEmail || currentUser.email;
+  const addExpense = async (expense: Omit<Expense, "id" | "date" | "ownerEmail">) => {
+    if (!userEmail) throw new Error("User not authenticated")
+    
+    const paidByEmail = expense.paidByEmail || userEmail;
     
     const splitAmong = expense.splitAmong.map(identifier => {
       if (identifier.includes('@')) {
         return identifier;
       }
-      return currentUser.email;
+      return userEmail;
     });
     
     const uniqueSplitAmong = [...new Set(splitAmong)];
     if (uniqueSplitAmong.length === 0) {
-      uniqueSplitAmong.push(currentUser.email);
+      uniqueSplitAmong.push(userEmail);
     }
     
     const newExpense = {
@@ -169,31 +235,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       paidByEmail,
       paidById: "",
       splitAmong: uniqueSplitAmong,
+      ownerEmail: userEmail
     };
     
-    const savedExpense = await db.saveExpense(newExpense);
-    setExpenses(await db.getAllExpenses());
+    const savedExpense = await db.saveExpense(newExpense, userEmail);
+    setExpenses(await db.getAllExpenses(userEmail));
     return savedExpense;
   }
 
   const updateExpense = async (expense: Expense) => {
+    if (!userEmail) throw new Error("User not authenticated")
+    
     const updatedExpense = {
       ...expense,
-      paidByEmail: expense.paidByEmail || currentUser.email
+      paidByEmail: expense.paidByEmail || userEmail
     };
     
-    const savedExpense = await db.saveExpense(updatedExpense)
-    setExpenses(await db.getAllExpenses())
+    const savedExpense = await db.saveExpense(updatedExpense, userEmail)
+    setExpenses(await db.getAllExpenses(userEmail))
     return savedExpense
   }
 
   const removeExpense = async (expenseId: string) => {
-    await db.deleteExpense(expenseId)
-    setExpenses(await db.getAllExpenses())
+    if (!userEmail) throw new Error("User not authenticated")
+    
+    await db.deleteExpense(expenseId, userEmail)
+    setExpenses(await db.getAllExpenses(userEmail))
   }
 
   const getBalances = async () => {
-    return db.calculateBalances()
+    if (!userEmail) throw new Error("User not authenticated")
+    
+    return db.calculateBalances(userEmail)
   }
 
   return (

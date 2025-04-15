@@ -6,12 +6,15 @@ export type Group = {
   description?: string
   members: string[]
   expenses: string[]
+  ownerEmail: string
 }
 
 export type Friend = {
   name: string
   email: string
   avatar?: string
+  ownerEmail: string
+  accessibleTo: string[]
 }
 
 export type Expense = {
@@ -23,6 +26,7 @@ export type Expense = {
   groupId: string
   splitAmong: string[]
   date: string
+  ownerEmail: string
 }
 
 export const generateId = () => {
