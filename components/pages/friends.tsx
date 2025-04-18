@@ -12,13 +12,13 @@ import { useState } from "react";
 
 export default function FriendsPage() {
   const { friends, addFriend } = useApp();
-  const [newFriend, setNewFriend] = useState({ name: "", email: "", avatar: "/avatar-placeholder.svg" });
+  const [newFriend, setNewFriend] = useState({ name: "", email: "", avatar: "/avatar-placeholder.svg", ownerEmail: "" });
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   const handleAddFriend = () => {
     if (newFriend.name && newFriend.email) {
       addFriend(newFriend);
-      setNewFriend({ name: "", email: "", avatar: "/avatar-placeholder.svg" });
+      setNewFriend({ name: "", email: "", avatar: "/avatar-placeholder.svg", ownerEmail: "" });
       setIsDialogOpen(false);
     }
   };

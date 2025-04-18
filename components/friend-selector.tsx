@@ -50,6 +50,7 @@ export function FriendSelector({ selectedFriends, onSelectionChange }: FriendSel
           name: newFriendName,
           email: newFriendEmail,
           avatar: "/avatar-placeholder.svg",
+          ownerEmail: ""
         })
 
         if (!selectedFriends.includes(newFriend.email)) {
