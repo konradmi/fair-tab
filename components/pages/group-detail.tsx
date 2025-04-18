@@ -13,7 +13,7 @@ import { toast } from "sonner";
 
 export default function GroupDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { groups, friends, expenses, updateGroup } = useApp();
+  const { groups, friends, expenses, updateGroup, currentUser } = useApp();
   const [showAddMembers, setShowAddMembers] = useState(false);
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -32,6 +32,17 @@ export default function GroupDetailPage() {
       </div>
     );
   }
+
+  const getMemberInfo = (memberEmail: string) => {
+    if (memberEmail === currentUser.email) {
+      return currentUser;
+    }
+    return friends.find(f => f.email === memberEmail) || {
+      name: memberEmail.split('@')[0],
+      email: memberEmail,
+      avatar: "/avatar-placeholder.svg"
+    };
+  };
 
   const handleAddMembers = async () => {
     if (selectedMembers.length === 0) {
@@ -97,14 +108,14 @@ export default function GroupDetailPage() {
               {groupExpenses.length > 0 ? (
                 <div className="space-y-4">
                   {groupExpenses.map(expense => {
-                    const paidBy = friends.find(f => f.email === expense.paidByEmail);
+                    const paidBy = getMemberInfo(expense.paidByEmail);
                     return (
                       <div key={expense.id} className="p-4 rounded-lg border">
                         <div className="flex justify-between">
                           <div>
                             <h3 className="font-medium">{expense.description}</h3>
                             <p className="text-sm text-muted-foreground">
-                              Paid by {paidBy?.name || 'Unknown'} • {new Date(expense.date).toLocaleDateString()}
+                              Paid by {paidBy.name} • {new Date(expense.date).toLocaleDateString()}
                             </p>
                           </div>
                           <div className="font-semibold">${expense.amount.toFixed(2)}</div>
@@ -164,16 +175,16 @@ export default function GroupDetailPage() {
               
               <div className="space-y-4">
                 {group.members.map(memberEmail => {
-                  const member = friends.find(f => f.email === memberEmail);
+                  const member = getMemberInfo(memberEmail);
                   return (
                     <div key={memberEmail} className="flex items-center gap-3">
                       <Avatar>
-                        <AvatarImage src={member?.avatar || "/avatar-placeholder.svg"} alt={member?.name || "Member"} />
-                        <AvatarFallback>{member?.name?.charAt(0) || "M"}</AvatarFallback>
+                        <AvatarImage src={member.avatar} alt={member.name} />
+                        <AvatarFallback>{member.name.charAt(0)}</AvatarFallback>
                       </Avatar>
                       <div>
-                        <p className="font-medium">{member?.name || "Unknown"}</p>
-                        <p className="text-sm text-muted-foreground">{member?.email || ""}</p>
+                        <p className="font-medium">{member.name}</p>
+                        <p className="text-sm text-muted-foreground">{member.email}</p>
                       </div>
                     </div>
                   );

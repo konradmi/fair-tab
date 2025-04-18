@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -17,26 +17,41 @@ import { toast } from "sonner"
 import { Download, Upload } from "lucide-react"
 import * as db from "@/lib/indexed-db"
 import { type Expense, type Friend, type Group } from "@/lib/types"
+import { useAppAuth } from "@/hooks/useAppAuth"
 
 export function DataExportImport() {
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const { userEmail } = useAppAuth()
+  const [friends, setFriends] = useState<Friend[]>([])
+  const [groups, setGroups] = useState<Group[]>([])
+  const [expenses, setExpenses] = useState<Expense[]>([])
+  
+  useEffect(() => {
+    const loadData = async () => {
+      if (!userEmail) return
+      setFriends(await db.getAllFriends(userEmail))
+      setGroups(await db.getAllGroups(userEmail))
+      setExpenses(await db.getAllExpenses(userEmail))
+    }
+    loadData()
+  }, [userEmail])
 
   const handleExport = async () => {
+    if (!userEmail) {
+      toast.error("You must be logged in to export data")
+      return
+    }
+    
     setIsLoading(true)
     try {
-      // Fetch all data from IndexedDB
-      const groups = await db.getAllGroups()
-      const friends = await db.getAllFriends()
-      const expenses = await db.getAllExpenses()
-
       const data = {
+        friends,
         groups,
-        friends, 
         expenses
       }
 
-      const blob = new Blob([JSON.stringify(data)], { type: "application/json" })
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
@@ -59,66 +74,53 @@ export function DataExportImport() {
     }
   }
 
-  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    setIsLoading(true)
-    const reader = new FileReader()
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!event.target.files?.length || !userEmail) return
     
-    reader.onload = async (e) => {
-      try {
-        const data = JSON.parse(e.target?.result as string)
-        
-        // Get database instance
-        const database = await db.getDb()
-        
-        // Clear existing data
-        await Promise.all([
-          database.friends.clear(),
-          database.groups.clear(),
-          database.expenses.clear()
-        ])
-        
-        // Import data from file
-        if (data.friends && Array.isArray(data.friends)) {
-          for (const friend of data.friends as Friend[]) {
-            await db.saveFriend(friend)
-          }
+    try {
+      const file = event.target.files[0]
+      const text = await file.text()
+      const data = JSON.parse(text)
+      
+      // Import friends
+      if (data.friends?.length) {
+        for (const friend of data.friends) {
+          friend.ownerEmail = userEmail
+          await db.saveFriend(friend, userEmail)
         }
-        
-        if (data.groups && Array.isArray(data.groups)) {
-          for (const group of data.groups as Group[]) {
-            await db.saveGroup(group)
-          }
-        }
-        
-        if (data.expenses && Array.isArray(data.expenses)) {
-          for (const expense of data.expenses as Expense[]) {
-            await db.saveExpense(expense)
-          }
-        }
-
-        toast.success("Data imported successfully", {
-          description: "Your data has been imported. Please refresh the page.",
-        })
-
-        // Refresh the page to load the new data
-        setTimeout(() => {
-          window.location.reload()
-        }, 1500)
-      } catch (error) {
-        console.error("Import error:", error)
-        toast.error("Import failed", {
-          description: "There was an error importing your data. Please check the file format.",
-        })
-      } finally {
-        setIsLoading(false)
       }
+      
+      // Import groups
+      if (data.groups?.length) {
+        for (const group of data.groups) {
+          group.ownerEmail = userEmail
+          if (!group.members.includes(userEmail)) {
+            group.members.push(userEmail)
+          }
+          await db.saveGroup(group, userEmail)
+        }
+      }
+      
+      // Import expenses
+      if (data.expenses?.length) {
+        for (const expense of data.expenses) {
+          expense.ownerEmail = userEmail
+          await db.saveExpense(expense, userEmail)
+        }
+      }
+      
+      // Refresh data
+      setFriends(await db.getAllFriends(userEmail))
+      setGroups(await db.getAllGroups(userEmail))
+      setExpenses(await db.getAllExpenses(userEmail))
+      
+      toast.success('Data imported successfully')
+    } catch (error) {
+      console.error('Error importing data:', error)
+      toast.error('Error importing data')
     }
-
-    reader.readAsText(file)
-    setImportDialogOpen(false)
+    
+    event.target.value = ''
   }
 
   return (
@@ -127,7 +129,7 @@ export function DataExportImport() {
         variant="outline" 
         size="sm" 
         onClick={handleExport} 
-        disabled={isLoading}
+        disabled={isLoading || !userEmail}
       >
         <Download className="mr-2 h-4 w-4" />
         {isLoading ? "Exporting..." : "Export Data"}
@@ -138,7 +140,7 @@ export function DataExportImport() {
           <Button 
             variant="outline" 
             size="sm"
-            disabled={isLoading}
+            disabled={isLoading || !userEmail}
           >
             <Upload className="mr-2 h-4 w-4" />
             {isLoading ? "Importing..." : "Import Data"}

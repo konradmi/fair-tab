@@ -11,13 +11,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 
 export default function NewExpensePage() {
-  const { addExpense, groups, friends } = useApp();
+  const { addExpense, groups, friends, currentUser } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [groupId, setGroupId] = useState("");
-  const [paidByEmail, setPaidByEmail] = useState("");
+  const [paidByEmail, setPaidByEmail] = useState(currentUser.email);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Check if groupId is provided in URL parameters
@@ -29,11 +29,20 @@ export default function NewExpensePage() {
     }
   }, [location.search]);
 
+  useEffect(() => {
+    setPaidByEmail(currentUser.email);
+  }, [currentUser.email]);
+
   const selectedGroup = groups.find(g => g.id === groupId);
   const comingFromGroup = new URLSearchParams(location.search).has("groupId");
 
+  const groupMembers = selectedGroup?.members || [];
+  const availablePayers = [currentUser, ...friends.filter(friend => 
+    friend.email !== currentUser.email && groupMembers.includes(friend.email)
+  )];
+
   const handleCreateExpense = async () => {
-    if (description && amount && groupId && paidByEmail) {
+    if (description && amount && groupId) {
       const parsedAmount = parseFloat(amount);
       
       if (!isNaN(parsedAmount) && parsedAmount > 0) {
@@ -117,9 +126,9 @@ export default function NewExpensePage() {
                 <SelectValue placeholder="Who paid?" />
               </SelectTrigger>
               <SelectContent>
-                {friends.map(friend => (
-                  <SelectItem key={friend.email} value={friend.email}>
-                    {friend.name}
+                {availablePayers.map(payer => (
+                  <SelectItem key={payer.email} value={payer.email}>
+                    {payer.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -132,7 +141,7 @@ export default function NewExpensePage() {
             </Button>
             <Button 
               onClick={handleCreateExpense}
-              disabled={!description || !amount || !groupId || !paidByEmail || isSubmitting}
+              disabled={!description || !amount || !groupId || isSubmitting}
             >
               {isSubmitting ? "Saving..." : "Save Expense"}
             </Button>
